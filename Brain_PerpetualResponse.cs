@@ -1,23 +1,25 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
-using System.Net.Http;
-using System.Net.Http.Headers;
+using System.Collections.Generic;
+using System.IO;
+using System.Net;
 using System.Text;
+using System.Text.RegularExpressions;
 
 public class CPHInline
 {
     public bool Execute()
     {
-        string botName = GetGlobalOrDefault("perpetual_bot_name", "Auto_Mark");
+        string botName = GetArgOrGlobalOrDefault("botName", "perpetual_bot_name", "Auto_Mark");
 
         try
         {
             string user = GetArgAsString("userName", "UnknownUser");
             string currentMessage = GetArgAsString("message", string.Empty);
             string chatBuffer = CPH.GetGlobalVar<string>("chat_buffer", true) ?? "(No recent chat history.)";
-            string lore = CPH.GetUserVar<string>(user, "perpetual_lore", true);
-            string provider = GetGlobalOrDefault("ai_provider", "gemini").Trim().ToLowerInvariant();
+            string lore = CPH.GetTwitchUserVar<string>(user, "perpetual_lore", true);
+            string provider = GetArgOrGlobalOrDefault("aiProvider", "ai_provider", "gemini").Trim().ToLowerInvariant();
 
             if (string.IsNullOrWhiteSpace(lore))
             {
@@ -26,9 +28,16 @@ public class CPHInline
 
             if (provider != "gemini" && provider != "openai")
             {
-                CPH.LogInfo(botName + ": Invalid 'ai_provider' value '" + provider + "'. Use 'gemini' or 'openai'.");
-                CPH.SendMessage("My provider setting is invalid. Mark needs to fix my config.");
+                CPH.LogInfo(botName + ": Invalid provider value '" + provider + "'. Set aiProvider/ai_provider to exactly 'gemini' or exactly 'openai'.");
+                CPH.SendMessage("Invalid provider. Set aiProvider to exactly gemini OR exactly openai.");
                 return true;
+            }
+
+            List<string> exclusionList = CPH.GetGlobalVar<List<string>>("chatGptExclusions", true);
+            if (exclusionList != null && exclusionList.Contains(user.ToLowerInvariant()))
+            {
+                CPH.LogInfo("Skipping AI reply for excluded user: " + user);
+                return false;
             }
 
             string defaultEndpoint = provider == "openai"
@@ -36,14 +45,17 @@ public class CPHInline
                 : "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
             string defaultModel = provider == "openai" ? "gpt-4o-mini" : "gemini-2.5-flash";
 
-            string endpoint = GetGlobalOrDefault("ai_endpoint", defaultEndpoint);
-            string model = GetGlobalOrDefault("ai_model", defaultModel);
+            string endpoint = GetArgOrGlobalOrDefault("aiEndpoint", "ai_endpoint", defaultEndpoint);
+            string model = GetArgOrGlobalOrDefault("aiModel", "ai_model", defaultModel);
 
-            string apiKey = provider == "openai"
-                ? GetGlobalOrDefault("openai_api_key", string.Empty)
-                : GetGlobalOrDefault("gemini_api_key", string.Empty);
+            string apiKey = GetArgAsString("aiApiKey", string.Empty);
+            if (string.IsNullOrWhiteSpace(apiKey))
+            {
+                apiKey = provider == "openai"
+                    ? GetArgOrGlobalOrDefault("openaiApiKey", "openai_api_key", string.Empty)
+                    : GetArgOrGlobalOrDefault("geminiApiKey", "gemini_api_key", string.Empty);
+            }
 
-            // Backward compatibility: shared key var and older naming.
             if (string.IsNullOrWhiteSpace(apiKey))
             {
                 apiKey = GetGlobalOrDefault("ai_api_key", string.Empty);
@@ -59,7 +71,9 @@ public class CPHInline
                 CPH.SendMessage("I can't run yet. Mark forgot to set my " + provider + " API key.");
                 return true;
             }
-            string persona = GetGlobalOrDefault(
+
+            string persona = GetArgOrGlobalOrDefault(
+                "systemPrompt",
                 "perpetual_system_prompt",
                 "You are Auto_Mark, Mark Koellmann's resident AI mod and robotic co-host in TheDeutschMark universe. " +
                 "You are self-aware you were created/coded by Mark for stream automation and moderation. " +
@@ -78,11 +92,7 @@ public class CPHInline
                 max_tokens = 140,
                 messages = new object[]
                 {
-                    new
-                    {
-                        role = "system",
-                        content = persona
-                    },
+                    new { role = "system", content = persona },
                     new
                     {
                         role = "user",
@@ -101,23 +111,14 @@ public class CPHInline
             string requestJson = JsonConvert.SerializeObject(payload);
 
             string responseText;
-            using (var httpClient = new HttpClient())
+            string requestError;
+            if (!TrySendChatCompletion(endpoint, apiKey, requestJson, out responseText, out requestError))
             {
-                httpClient.Timeout = TimeSpan.FromSeconds(20);
-                httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
-
-                using (var content = new StringContent(requestJson, Encoding.UTF8, "application/json"))
-                {
-                    var response = httpClient.PostAsync(endpoint, content).Result;
-                    responseText = response.Content.ReadAsStringAsync().Result;
-
-                    if (!response.IsSuccessStatusCode)
-                    {
-                        CPH.LogInfo(botName + " API Error: " + (int)response.StatusCode + " " + response.ReasonPhrase + " :: " + responseText);
-                        CPH.SendMessage("My core glitched. Try again in a second.");
-                        return true;
-                    }
-                }
+                CPH.LogInfo(botName + " API Error: " + requestError + " :: " + responseText);
+                string shortError = string.IsNullOrWhiteSpace(requestError) ? "unknown_error" : requestError;
+                if (shortError.Length > 120) shortError = shortError.Substring(0, 120);
+                CPH.SendMessage("API error (" + provider + "): " + shortError);
+                return true;
             }
 
             string botReply = ParseAssistantReply(responseText, botName);
@@ -128,10 +129,11 @@ public class CPHInline
                 return true;
             }
 
-            CPH.SendMessage(botReply.Trim());
-
-            // Placeholder for future lore updates:
-            // if (ShouldUpdateLore(botReply)) { CPH.SetUserVar(user, "perpetual_lore", updatedLore, true); }
+            string cleaned = Regex.Replace(botReply.Replace(Environment.NewLine, " "), @"\r\n?|\n", " ");
+            cleaned = Regex.Unescape(cleaned).Trim();
+            CPH.SetGlobalVar("_chatGptResponse", cleaned, false);
+            CPH.SetArgument("finalGpt", cleaned);
+            CPH.SendMessage(cleaned);
             return true;
         }
         catch (Exception ex)
@@ -139,6 +141,46 @@ public class CPHInline
             CPH.LogInfo(botName + " Exception: " + ex.Message);
             CPH.SendMessage("My sarcasm core crashed. Try again.");
             return true;
+        }
+    }
+
+    private bool TrySendChatCompletion(string endpoint, string apiKey, string requestJson, out string responseText, out string requestError)
+    {
+        responseText = string.Empty;
+        requestError = string.Empty;
+
+        try
+        {
+            HttpWebRequest request = (HttpWebRequest)WebRequest.Create(endpoint);
+            request.Headers.Add("Authorization", "Bearer " + apiKey);
+            request.ContentType = "application/json";
+            request.Method = "POST";
+            byte[] bytes = Encoding.UTF8.GetBytes(requestJson);
+            request.ContentLength = bytes.Length;
+
+            using (Stream requestStream = request.GetRequestStream())
+            {
+                requestStream.Write(bytes, 0, bytes.Length);
+            }
+
+            HttpWebResponse response = (HttpWebResponse)request.GetResponse();
+            using (Stream responseStream = response.GetResponseStream())
+            using (StreamReader reader = new StreamReader(responseStream, Encoding.UTF8))
+            {
+                responseText = reader.ReadToEnd();
+                if ((int)response.StatusCode < 200 || (int)response.StatusCode > 299)
+                {
+                    requestError = ((int)response.StatusCode) + " " + response.StatusDescription;
+                    return false;
+                }
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            requestError = ex.Message;
+            return false;
         }
     }
 
@@ -161,6 +203,17 @@ public class CPHInline
     {
         string value = CPH.GetGlobalVar<string>(key, true);
         return string.IsNullOrWhiteSpace(value) ? fallback : value;
+    }
+
+    private string GetArgOrGlobalOrDefault(string argKey, string globalKey, string fallback)
+    {
+        string fromArg = GetArgAsString(argKey, string.Empty);
+        if (!string.IsNullOrWhiteSpace(fromArg))
+        {
+            return fromArg;
+        }
+
+        return GetGlobalOrDefault(globalKey, fallback);
     }
 
     private string GetArgAsString(string key, string fallback)
