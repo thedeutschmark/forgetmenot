@@ -4,6 +4,7 @@ This repo contains two **copy/paste-ready** C# scripts for Streamer.bot's **Exec
 
 - `Listener_ChatLogger.cs` (chat logger / short-term memory)
 - `Brain_PerpetualResponse.cs` (AI response generator)
+- `Setup_PerpetualOptions.cs` (option setter from sub-action arguments)
 
 Default personality and naming are now set for **Auto_Mark** (resident AI mod / robotic co-host persona).
 
@@ -38,6 +39,22 @@ What it does:
 - Parses and posts model response to chat.
 - Logs API errors via `CPH.LogInfo`.
 
+Important for Streamer.bot v1.0.x:
+- If your C# action cannot find `System.Net`/`HttpClient`, duplicate the working ChatGPT extension's Execute Code sub-action and paste this code there so it keeps the same references.
+
+## 3) Setup Action (User Options)
+
+1. Create Action: `Auto_Mark - Setup`.
+2. Add sub-action: **Execute C# Code**.
+3. Paste `Setup_PerpetualOptions.cs`.
+4. Add `Set Argument` lines before it (same style as ChatGPT Set-Up), e.g.:
+   - `aiProvider = gemini` or `openai` (single value only)
+   - `aiApiKey = <key>`
+   - `aiModel = gemini-2.5-flash` (or OpenAI model)
+   - `aiEndpoint = <optional override>`
+   - `behavior = <system prompt>`
+   - `broadcasterReplies = true` or `false`
+
 ## 3) Settings You Can Change in Streamer.bot
 
 Set these in **Global Variables**:
@@ -50,6 +67,14 @@ Set these in **Global Variables**:
 - `ai_model` = optional override (provider default used if empty)
 - `perpetual_system_prompt` = full Auto_Mark persona prompt
 - `chat_buffer` = empty string initially
+
+Important:
+- `ai_provider` must be a single value: `gemini` or `openai`.
+- Do not set it to a phrase like `gemini or openai`.
+
+Sub-action argument examples (`Set Argument` before Execute C#):
+- `aiProvider = gemini`
+- `aiProvider = openai`
 
 Backward compatibility:
 - Shared key variable `ai_api_key` is still supported.
