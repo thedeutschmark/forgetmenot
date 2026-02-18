@@ -17,29 +17,48 @@ public class CPHInline
             string currentMessage = GetArgAsString("message", string.Empty);
             string chatBuffer = CPH.GetGlobalVar<string>("chat_buffer", true) ?? "(No recent chat history.)";
             string lore = CPH.GetUserVar<string>(user, "perpetual_lore", true);
+            string provider = GetGlobalOrDefault("ai_provider", "gemini").Trim().ToLowerInvariant();
 
             if (string.IsNullOrWhiteSpace(lore))
             {
                 lore = "Unknown Subject.";
             }
 
-            string apiKey = GetGlobalOrDefault("ai_api_key", string.Empty);
-            if (string.IsNullOrWhiteSpace(apiKey))
+            if (provider != "gemini" && provider != "openai")
             {
-                // Backward compatibility with previous variable naming.
-                apiKey = GetGlobalOrDefault("openai_api_key", string.Empty);
-            }
-
-            if (string.IsNullOrWhiteSpace(apiKey))
-            {
-                CPH.LogInfo(botName + ": Missing Global Variable 'ai_api_key' (or legacy 'openai_api_key').");
-                CPH.SendMessage("I can't run yet. Mark forgot to set my AI API key.");
+                CPH.LogInfo(botName + ": Invalid 'ai_provider' value '" + provider + "'. Use 'gemini' or 'openai'.");
+                CPH.SendMessage("My provider setting is invalid. Mark needs to fix my config.");
                 return true;
             }
 
-            // Gemini OpenAI-compatible endpoint defaults.
-            string endpoint = GetGlobalOrDefault("ai_endpoint", "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions");
-            string model = GetGlobalOrDefault("ai_model", "gemini-2.0-flash");
+            string defaultEndpoint = provider == "openai"
+                ? "https://api.openai.com/v1/chat/completions"
+                : "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
+            string defaultModel = provider == "openai" ? "gpt-4o-mini" : "gemini-2.5-flash";
+
+            string endpoint = GetGlobalOrDefault("ai_endpoint", defaultEndpoint);
+            string model = GetGlobalOrDefault("ai_model", defaultModel);
+
+            string apiKey = provider == "openai"
+                ? GetGlobalOrDefault("openai_api_key", string.Empty)
+                : GetGlobalOrDefault("gemini_api_key", string.Empty);
+
+            // Backward compatibility: shared key var and older naming.
+            if (string.IsNullOrWhiteSpace(apiKey))
+            {
+                apiKey = GetGlobalOrDefault("ai_api_key", string.Empty);
+            }
+            if (string.IsNullOrWhiteSpace(apiKey) && provider == "gemini")
+            {
+                apiKey = GetGlobalOrDefault("google_api_key", string.Empty);
+            }
+
+            if (string.IsNullOrWhiteSpace(apiKey))
+            {
+                CPH.LogInfo(botName + ": Missing API key for provider '" + provider + "'.");
+                CPH.SendMessage("I can't run yet. Mark forgot to set my " + provider + " API key.");
+                return true;
+            }
             string persona = GetGlobalOrDefault(
                 "perpetual_system_prompt",
                 "You are Auto_Mark, Mark Koellmann's resident AI mod and robotic co-host in TheDeutschMark universe. " +

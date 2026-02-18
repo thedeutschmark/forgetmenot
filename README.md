@@ -34,7 +34,7 @@ What it does:
 - Pulls `chat_buffer`, current user name, and current message.
 - Pulls User Var `perpetual_lore` for that user.
 - Builds the model prompt using configurable bot name + system prompt.
-- Sends prompt to **Gemini OpenAI-compatible endpoint** by default.
+- Uses `ai_provider` to pick **Gemini** or **OpenAI** key + default endpoint/model.
 - Parses and posts model response to chat.
 - Logs API errors via `CPH.LogInfo`.
 
@@ -43,14 +43,17 @@ What it does:
 Set these in **Global Variables**:
 
 - `perpetual_bot_name` = default `Auto_Mark`
-- `ai_api_key` = your Gemini API key (preferred)
-- `ai_endpoint` = default `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions`
-- `ai_model` = default `gemini-2.0-flash`
+- `ai_provider` = `gemini` or `openai` (default `gemini`)
+- `gemini_api_key` = your Gemini key
+- `openai_api_key` = your OpenAI key
+- `ai_endpoint` = optional override (provider default used if empty)
+- `ai_model` = optional override (provider default used if empty)
 - `perpetual_system_prompt` = full Auto_Mark persona prompt
 - `chat_buffer` = empty string initially
 
 Backward compatibility:
-- If `ai_api_key` is missing, script falls back to `openai_api_key`.
+- Shared key variable `ai_api_key` is still supported.
+- Legacy `google_api_key` is checked for Gemini if `gemini_api_key` is missing.
 
 Optional per-user variable:
 - `perpetual_lore` (User Variable), e.g. `Fumbles every platform jump.`
@@ -77,13 +80,13 @@ The default system prompt implements this behavior:
    - required Streamer.bot version
    - required Twitch account auth state
    - variable table from section 3
-   - first-run instructions to set `ai_api_key`
+   - first-run instructions to set `ai_provider` and provider key
 6. Test import on a clean Streamer.bot profile before publishing.
 
 ## 6) What You Need To Do Right Now
 
 1. Paste both scripts into their corresponding Streamer.bot actions.
-2. Set `ai_api_key`.
+2. Set `ai_provider` (`gemini` or `openai`) and matching API key variable.
 3. Confirm globals use defaults (or customize name/model/prompt).
 4. Send test chat messages to populate `chat_buffer`.
 5. Run `!auto_mark roast me`.
