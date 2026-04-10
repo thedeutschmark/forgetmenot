@@ -32,15 +32,23 @@ public class CPHInline
             return true; // Nothing transcribed (silence, noise, etc.)
         }
 
-        // Skip very short fragments — STT often fires partial results
-        // like "uh" or "um" that add noise without value.
-        if (transcript.Trim().Length < 8)
-        {
-            return true;
-        }
+        // Hybrid filter: skip filler words AND fragments too short to
+        // carry meaning. STT fires constantly — most of it is noise.
+        string cleaned = transcript.Trim();
+        if (cleaned.Length < 3) return true;
+
+        // Filler word blocklist — common STT noise across English speakers.
+        // Exact match after lowercasing + stripping trailing punctuation.
+        string normalized = cleaned.TrimEnd('.', ',', '!', '?').ToLowerInvariant();
+        if (IsFillerOnly(normalized)) return true;
+
+        // Word count gate — single-word utterances that aren't filler
+        // still rarely carry useful context for memory.
+        int wordCount = normalized.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries).Length;
+        if (wordCount < 2) return true;
 
         string botName = GetGlobalOrDefault("perpetual_bot_name", "Auto_Mark");
-        string newLine = "[STREAMER]: " + transcript.Trim();
+        string newLine = "[STREAMER]: " + cleaned;
 
         // Append to session buffer (full, for compression)
         string existingSessionBuffer = CPH.GetGlobalVar<string>("session_buffer_full", true) ?? string.Empty;
@@ -81,8 +89,34 @@ public class CPHInline
 
         CPH.SetGlobalVar("chat_buffer", combined, true);
 
-        CPH.LogInfo(botName + " Transcript: logged " + transcript.Trim().Length + " chars");
+        CPH.LogInfo(botName + " Transcript: logged " + cleaned.Length + " chars");
         return true;
+    }
+
+    // Filler detection — covers hesitation markers, backchannels,
+    // and single-word acknowledgments that STT picks up constantly.
+    // Source: common disfluency patterns from speech recognition literature.
+    private static readonly System.Collections.Generic.HashSet<string> Fillers =
+        new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            // Hesitation markers
+            "uh", "um", "uhh", "umm", "erm", "hmm", "hm", "hmmmm",
+            "ah", "ahh", "eh", "er", "mm", "mmm", "mhm",
+            // Backchannels
+            "yeah", "yep", "yup", "ya", "nah", "nope", "no",
+            "ok", "okay", "sure", "right", "alright",
+            // Single-word reactions
+            "wow", "oh", "ooh", "oof", "lol", "haha", "ha",
+            "nice", "cool", "true", "same", "yes", "yo",
+            // STT artifacts
+            "thank you", "thanks", "bye", "hello", "hi", "hey",
+            // Trailing filler
+            "so", "well", "like", "anyway", "anyways", "basically",
+        };
+
+    private static bool IsFillerOnly(string text)
+    {
+        return Fillers.Contains(text);
     }
 
     private string GetGlobalOrDefault(string key, string fallback)
