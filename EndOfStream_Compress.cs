@@ -206,9 +206,14 @@ public class CPHInline
         string loreDir = Path.Combine(dataDir, "lore");
         Directory.CreateDirectory(loreDir);
 
+        const int maxWritesPerRun = 5;
+        const int maxFactLength = 200;
         int addedCount = 0;
+
         foreach (string line in lines)
         {
+            if (addedCount >= maxWritesPerRun) break;
+
             // Stop if we hit another section header
             string trimmed = line.Trim();
             if (trimmed.Length > 0 && !trimmed.Contains(':')) break;
@@ -223,7 +228,20 @@ public class CPHInline
             if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(fact)) continue;
             if (username.Length < 2 || fact.Length < 5) continue;
 
+            // Cap fact length to prevent prompt blowup
+            if (fact.Length > maxFactLength) fact = fact.Substring(0, maxFactLength);
+
+            // Only accept usernames that appear in an existing lore file
+            // or were seen in the session buffer (simple check: buffer contains the name)
             string filePath = Path.Combine(loreDir, username + ".txt");
+            bool knownUser = File.Exists(filePath);
+            if (!knownUser)
+            {
+                string sessionBuf = CPH.GetGlobalVar<string>("session_buffer_full", true) ?? string.Empty;
+                knownUser = sessionBuf.IndexOf("[" + username + "]", StringComparison.OrdinalIgnoreCase) >= 0
+                         || sessionBuf.IndexOf(username + ":", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+            if (!knownUser) continue;
 
             // Duplicate check — case-insensitive substring match
             if (File.Exists(filePath))

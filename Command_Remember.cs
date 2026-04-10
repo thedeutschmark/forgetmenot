@@ -58,7 +58,7 @@ public class CPHInline
                 CPH.SendMessage("I already know that about " + targetUser + ".");
                 return true;
             }
-            string updated = string.IsNullOrWhiteSpace(existing) ? fact : existing + " | " + fact;
+            string updated = string.IsNullOrWhiteSpace(existing) ? "- " + fact : existing + "\n- " + fact;
             CPH.SetTwitchUserVar(targetUser, "perpetual_lore", updated, true);
             CPH.SendMessage(botName + " locked in: " + targetUser + " — " + fact);
             return true;
