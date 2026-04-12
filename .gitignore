@@ -1,0 +1,14 @@
+# Build artifacts
+runtime/build/
+runtime/dist/
+runtime/node_modules/
+tray/forgetmenot.exe
+tray/forgetmenot-tray.exe
+tray/embedded/forgetmenot.exe
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+.idea/
