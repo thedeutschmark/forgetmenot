@@ -1,10 +1,13 @@
 # Build artifacts
-runtime/build/
-runtime/dist/
-runtime/node_modules/
-tray/forgetmenot.exe
-tray/forgetmenot-tray.exe
-tray/embedded/forgetmenot.exe
+engine/build/
+engine/dist/
+engine/node_modules/
+app/forgetmenot.exe
+app/forgetmenot.exe.sha256
+app/embedded/forgetmenot.exe
+
+# Release staging (generated locally, not committed)
+RELEASE_NOTES_*.md
 
 # OS / editor
 .DS_Store

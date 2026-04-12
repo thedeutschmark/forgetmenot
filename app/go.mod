@@ -1,4 +1,4 @@
-module github.com/deutschmark/forgetmenot-tray
+module github.com/thedeutschmark/forgetmenot/app
 
 go 1.22
 

@@ -2,8 +2,6 @@
 
 A local-first Twitch chat bot that remembers your stream lore, learns your community, and stays in your control. Runs as a single Windows executable on your own machine — no servers to manage, no chat data leaving your computer.
 
-> **This is a transparency mirror.** The bot runs entirely on your machine; this repo lets you read every line of code that does it. Source for the actual binary you download.
-
 ## Download
 
 Get the latest `forgetmenot.exe` from the [Releases page](https://github.com/thedeutschmark/forgetmenot/releases). One file. Double-click to run. First launch opens a browser tab to pair with your Twitch account.
@@ -23,22 +21,22 @@ Settings, personality templates, and review dashboards live at [toolkit.deutschm
 
 | Folder | What's inside |
 |---|---|
-| [`runtime/`](runtime/) | Node.js bot runtime — Twitch chat ingest, SQLite memory, LLM calls, action evaluation. Compiles to `forgetmenot.exe` (Node Single Executable Application). |
-| [`tray/`](tray/) | Go Windows tray shell — embeds the runtime, manages it as a child process, exposes the system tray menu. Builds the actual `forgetmenot.exe` users download. |
+| [`engine/`](engine/) | The bot engine — Twitch chat ingest, SQLite memory, LLM calls, action evaluation. Node.js, compiles to a standalone executable. |
+| [`app/`](app/) | The Windows app — embeds the engine, manages it as a child process, shows the system tray icon. Go. Produces the `forgetmenot.exe` users download. |
 
 ## Build from source
 
 Requires **Node.js 22+** and **Go 1.22+**.
 
 ```
-cd runtime
-build-exe.bat          # produces runtime/build/forgetmenot.exe
+cd engine
+build-exe.bat          # produces engine/build/forgetmenot.exe
 
-cd ../tray
-build.bat              # embeds the runtime and produces tray/forgetmenot.exe
+cd ../app
+build.bat              # embeds the engine and produces app/forgetmenot.exe
 ```
 
-The `tray/forgetmenot.exe` is the single-file distributable.
+The `app/forgetmenot.exe` is the single-file distributable.
 
 ## What ForgetMeNot does NOT do
 
