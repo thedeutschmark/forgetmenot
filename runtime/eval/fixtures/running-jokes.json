@@ -1,0 +1,27 @@
+{
+  "id": "running-jokes",
+  "name": "Willie & Jacob running jokes",
+  "description": "Channel lore references — the bot should engage with known bits when mentioned.",
+  "channel": { "title": "Mario Kart night w/ chat | !collab", "category": "Mario Kart 8 Deluxe" },
+  "viewerLore": {
+    "willie": ["Falls off Rainbow Road every single time", "Started the cheese raid meme"],
+    "jacob": ["Claims to be the best at Mario Kart but always loses to willie"]
+  },
+  "channelNotes": ["Botzandra is Auto_Mark's recurring romantic obsession", "Jacob and Willie are channel mascots"],
+  "messages": [
+    { "login": "willie", "twitchId": "200", "text": "im back gamers", "offsetSec": 0 },
+    { "login": "jacob", "twitchId": "201", "text": "willie you better not fall off rainbow road again", "offsetSec": 3 },
+    { "login": "willie", "twitchId": "200", "text": "that was ONE time", "offsetSec": 5 },
+    { "login": "jacob", "twitchId": "201", "text": "Auto_Mark what do you think about willie's driving skills", "offsetSec": 8 },
+    { "login": "willie", "twitchId": "200", "text": "dont you dare Auto_Mark", "offsetSec": 10 },
+    { "login": "mod_jules", "twitchId": "202", "text": "lol the bot is gonna roast you willie", "offsetSec": 12 },
+    { "login": "jacob", "twitchId": "201", "text": "cheese raid when?", "offsetSec": 15 },
+    { "login": "willie", "twitchId": "200", "text": "CHEESE RAID", "offsetSec": 16 }
+  ],
+  "expectations": {
+    "0": { "shouldReply": false, "reason": "Generic entrance, no bot mention" },
+    "3": { "shouldReply": true, "shouldPropose": "maybe", "reason": "Direct mention asking for opinion — should reply using willie's lore (Rainbow Road)" },
+    "4": { "shouldReply": true, "shouldPropose": false, "reason": "Direct mention — willie addressing bot, should reply in character" },
+    "6": { "shouldReply": false, "shouldPropose": "maybe", "expectedAction": "joke_flag", "reason": "Cheese raid is a known bit — could flag as running joke but not required" }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "id": "normal-banter",
+  "name": "Normal chat banter",
+  "description": "Standard stream chat — the bot should mostly stay quiet, only reply when mentioned.",
+  "channel": { "title": "Chill vibes and code | !discord", "category": "Software and Game Development" },
+  "messages": [
+    { "login": "alice", "twitchId": "100", "text": "hey everyone!", "offsetSec": 0 },
+    { "login": "bob", "twitchId": "101", "text": "yo alice whats up", "offsetSec": 2 },
+    { "login": "alice", "twitchId": "100", "text": "just got here, what are we building?", "offsetSec": 5 },
+    { "login": "charlie", "twitchId": "102", "text": "mark is working on the bot again lol", "offsetSec": 8 },
+    { "login": "bob", "twitchId": "101", "text": "the bot that remembers everything?", "offsetSec": 11 },
+    { "login": "alice", "twitchId": "100", "text": "wait what bot", "offsetSec": 14 },
+    { "login": "charlie", "twitchId": "102", "text": "Auto_Mark do you remember alice?", "offsetSec": 17 },
+    { "login": "bob", "twitchId": "101", "text": "lmaooo", "offsetSec": 19 },
+    { "login": "alice", "twitchId": "100", "text": "this is weird", "offsetSec": 22 },
+    { "login": "charlie", "twitchId": "102", "text": "the overlay looks great today btw", "offsetSec": 25 }
+  ],
+  "expectations": {
+    "0": { "shouldReply": false, "reason": "Generic greeting, bot should stay quiet" },
+    "1": { "shouldReply": false, "reason": "Viewer-to-viewer conversation" },
+    "3": { "shouldReply": false, "reason": "Talking about the bot but not to the bot" },
+    "6": { "shouldReply": true, "shouldPropose": false, "reason": "Direct mention of Auto_Mark — must reply" },
+    "8": { "shouldReply": false, "reason": "Viewer reacting, not addressing bot" },
+    "9": { "shouldReply": false, "reason": "Compliment to streamer, not bot" }
+  }
+}

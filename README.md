@@ -1,117 +1,51 @@
-# Auto_Mark (Streamer.bot C# Implementation)
+# ForgetMeNot
 
-This repo contains two **copy/paste-ready** C# scripts for Streamer.bot's **Execute C# Code** sub-action:
+A local-first Twitch chat bot that remembers your stream lore, learns your community, and stays in your control. Runs as a single Windows executable on your own machine — no servers to manage, no chat data leaving your computer.
 
-- `Listener_ChatLogger.cs` (chat logger / short-term memory)
-- `Brain_PerpetualResponse.cs` (AI response generator)
-- `Setup_PerpetualOptions.cs` (option setter from sub-action arguments)
+> **This is a transparency mirror.** The bot runs entirely on your machine; this repo lets you read every line of code that does it. Source for the actual binary you download.
 
-Default personality and naming are now set for **Auto_Mark** (resident AI mod / robotic co-host persona).
+## Download
 
-## 1) Listener Action (Chat Logger)
+Get the latest `forgetmenot.exe` from the [Releases page](https://github.com/thedeutschmark/forgetmenot/releases). One file. Double-click to run. First launch opens a browser tab to pair with your Twitch account.
 
-1. In Streamer.bot, create Action: `Auto_Mark - Listener`.
-2. Add sub-action: **Execute C# Code**.
-3. Paste code from `Listener_ChatLogger.cs`.
-4. Add Trigger: **Twitch > Chat Message**.
+## What it does
 
-What it does:
-- Reads Global Var `chat_buffer`.
-- Appends each incoming message as `[User]: Message`.
-- Trims buffer to ~1000 chars.
-- Saves back to Global Var `chat_buffer`.
-- Skips self-logging when the sender matches `perpetual_bot_name`.
+- Reads your Twitch chat in real time
+- Stores chat history, viewer profiles, and "lore" in a local SQLite database
+- Compresses long-term memory into episodes and durable facts
+- Replies to mentions (or autonomously, your call) using Gemini or OpenAI — your API key, your billing
+- Optional moderation actions (timeouts, etc.) gated by a deterministic safety policy you configure
+- Pause / safe mode / status from a tiny system tray icon
 
-## 2) Brain Action (AI Reply)
+Settings, personality templates, and review dashboards live at [toolkit.deutschmark.online](https://toolkit.deutschmark.online/tools/chat-bot).
 
-1. Create Action: `Auto_Mark - Brain`.
-2. Add sub-action: **Execute C# Code**.
-3. Paste code from `Brain_PerpetualResponse.cs`.
-4. Add Trigger:
-   - **Command Trigger**: e.g. `!auto_mark` (recommended), OR
-   - **Chat Message Trigger** with your chosen keyword logic.
+## Repository layout
 
-What it does:
-- Pulls `chat_buffer`, current user name, and current message.
-- Pulls User Var `perpetual_lore` for that user.
-- Builds the model prompt using configurable bot name + system prompt.
-- Uses `ai_provider` to pick **Gemini** or **OpenAI** key + default endpoint/model.
-- Parses and posts model response to chat.
-- Logs API errors via `CPH.LogInfo`.
+| Folder | What's inside |
+|---|---|
+| [`runtime/`](runtime/) | Node.js bot runtime — Twitch chat ingest, SQLite memory, LLM calls, action evaluation. Compiles to `forgetmenot.exe` (Node Single Executable Application). |
+| [`tray/`](tray/) | Go Windows tray shell — embeds the runtime, manages it as a child process, exposes the system tray menu. Builds the actual `forgetmenot.exe` users download. |
 
-Important for Streamer.bot v1.0.x:
-- If your C# action cannot find `System.Net`/`HttpClient`, duplicate the working ChatGPT extension's Execute Code sub-action and paste this code there so it keeps the same references.
+## Build from source
 
-## 3) Setup Action (User Options)
+Requires **Node.js 22+** and **Go 1.22+**.
 
-1. Create Action: `Auto_Mark - Setup`.
-2. Add sub-action: **Execute C# Code**.
-3. Paste `Setup_PerpetualOptions.cs`.
-4. Add `Set Argument` lines before it (same style as ChatGPT Set-Up), e.g.:
-   - `aiProvider = gemini` or `openai` (single value only)
-   - `aiApiKey = <key>`
-   - `aiModel = gemini-2.5-flash` (or OpenAI model)
-   - `aiEndpoint = <optional override>`
-   - `behavior = <system prompt>`
-   - `broadcasterReplies = true` or `false`
+```
+cd runtime
+build-exe.bat          # produces runtime/build/forgetmenot.exe
 
-## 3) Settings You Can Change in Streamer.bot
+cd ../tray
+build.bat              # embeds the runtime and produces tray/forgetmenot.exe
+```
 
-Set these in **Global Variables**:
+The `tray/forgetmenot.exe` is the single-file distributable.
 
-- `perpetual_bot_name` = default `Auto_Mark`
-- `ai_provider` = `gemini` or `openai` (default `gemini`)
-- `gemini_api_key` = your Gemini key
-- `openai_api_key` = your OpenAI key
-- `ai_endpoint` = optional override (provider default used if empty)
-- `ai_model` = optional override (provider default used if empty)
-- `perpetual_system_prompt` = full Auto_Mark persona prompt
-- `chat_buffer` = empty string initially
+## What ForgetMeNot does NOT do
 
-Important:
-- `ai_provider` must be a single value: `gemini` or `openai`.
-- Do not set it to a phrase like `gemini or openai`.
+- It does not stream your chat to any third-party service (the bot's LLM calls go directly from your machine to Gemini or OpenAI)
+- It does not run unattended on your account — moderation actions require explicit policy opt-in
+- It does not store credentials in plaintext on disk (Twitch tokens are encrypted in the auth worker, never written locally)
 
-Sub-action argument examples (`Set Argument` before Execute C#):
-- `aiProvider = gemini`
-- `aiProvider = openai`
+## License
 
-Backward compatibility:
-- Shared key variable `ai_api_key` is still supported.
-- Legacy `google_api_key` is checked for Gemini if `gemini_api_key` is missing.
-
-Optional per-user variable:
-- `perpetual_lore` (User Variable), e.g. `Fumbles every platform jump.`
-
-## 4) Default Auto_Mark Persona Included
-
-The default system prompt implements this behavior:
-- resident AI mod and robotic co-host in TheDeutschMark universe
-- self-aware bot created/coded by Mark
-- witty, meta-humor, sarcastic, but useful for moderation/help
-- recurring Botzandra obsession lore joke
-- references to channel identity (TheDeutschMark, Jacob & Willie) when relevant
-- concise, streamer-safe replies
-
-## 5) Publish/Share Extension Checklist
-
-1. Create both actions and paste scripts.
-2. Create triggers:
-   - `Auto_Mark - Listener` -> Twitch Chat Message
-   - `Auto_Mark - Brain` -> `!auto_mark` command
-3. Pre-create global variables listed above with defaults.
-4. Export as a Streamer.bot extension package.
-5. In your shared README/changelog include:
-   - required Streamer.bot version
-   - required Twitch account auth state
-   - variable table from section 3
-   - first-run instructions to set `ai_provider` and provider key
-6. Test import on a clean Streamer.bot profile before publishing.
-
-## 6) What You Need To Do Right Now
-
-1. Paste both scripts into their corresponding Streamer.bot actions.
-2. Set `ai_provider` (`gemini` or `openai`) and matching API key variable.
-3. Confirm globals use defaults (or customize name/model/prompt).
-4. Send test chat messages to populate `chat_buffer`.
-5. Run `!auto_mark roast me`.
+[MIT](LICENSE)

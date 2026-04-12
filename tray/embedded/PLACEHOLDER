@@ -1,0 +1,7 @@
+This directory is populated by build.bat which copies
+../../forgetmenot/build/forgetmenot.exe → ./forgetmenot.exe
+just before Go compiles the tray binary.
+
+The embedded forgetmenot.exe is bundled inside forgetmenot-tray.exe via
+Go's //go:embed directive (see runtime_embed.go) and extracted on
+first launch to %LOCALAPPDATA%/ForgetMeNot/runtime/forgetmenot.exe.
