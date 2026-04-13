@@ -1,0 +1,8 @@
+# Build artifacts
+build/
+dist/
+node_modules/
+
+# Test artifacts
+codex_patch_test.txt
+*.tmp
