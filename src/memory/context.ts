@@ -59,7 +59,9 @@ export function buildReplyContext(
     .get(targetTwitchId, targetLogin.toLowerCase()) as Record<string, unknown> | undefined;
 
   if (viewer) {
-    // Load semantic notes for this viewer
+    // Load semantic notes for this viewer.
+    // subject_id is the lowercase login (matches how memory/notes.ts writes them
+    // — see notes.ts line 127). Using twitch_user_id here returns nothing.
     const notes = db
       .prepare(`
         SELECT fact FROM semantic_notes
@@ -67,7 +69,7 @@ export function buildReplyContext(
         ORDER BY last_confirmed_at DESC
         LIMIT 10
       `)
-      .all(String(viewer.twitch_user_id || viewer.id)) as Array<{ fact: string }>;
+      .all(String(viewer.login || "").toLowerCase()) as Array<{ fact: string }>;
 
     targetViewer = {
       login: String(viewer.login || ""),
