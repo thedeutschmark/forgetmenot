@@ -126,6 +126,9 @@ function startOperationalMode(localConfig: LocalConfig, _server: http.Server): (
         lastConfigFetch: Date.now(),
         configExpiresAt: new Date(bundle.expiresAt).getTime(),
         safeMode: bundle.safeMode,
+        botConnected: bundle.botAccount !== null,
+        botLogin: bundle.botAccount?.login ?? null,
+        botDisplayName: bundle.botAccount?.displayName ?? bundle.botAccount?.login ?? null,
       });
 
       if (isFirst) {
@@ -178,7 +181,12 @@ function startOperationalMode(localConfig: LocalConfig, _server: http.Server): (
     },
     (error) => {
       console.warn(`[forgetmenot] Config refresh failed: ${error}`);
-      setHealthFlags({ authState: currentBundle ? "authenticated" : "unauthenticated" });
+      setHealthFlags({
+        authState: currentBundle ? "authenticated" : "unauthenticated",
+        botConnected: currentBundle?.botAccount != null,
+        botLogin: currentBundle?.botAccount?.login ?? null,
+        botDisplayName: currentBundle?.botAccount?.displayName ?? currentBundle?.botAccount?.login ?? null,
+      });
     },
   );
 

@@ -23,6 +23,12 @@ export interface HealthStatus {
   safeMode: boolean;
   paused: boolean;
   engineMode: string | null;
+  botConnected: boolean;
+  /** Login of the connected bot account, null if none paired. Surfaced to the
+   *  tray so users can confirm which Twitch account is speaking on their behalf. */
+  botLogin: string | null;
+  /** Display-name of the connected bot account (defaults to login when unset). */
+  botDisplayName: string | null;
   version: string;
   issues: string[];
 }
@@ -36,6 +42,9 @@ let _safeMode = false;
 let _llmHealthy: "healthy" | "unhealthy" | "unknown" = "unknown";
 let _helixHealthy: "healthy" | "unhealthy" | "unknown" = "unknown";
 let _compactionHealthy: "healthy" | "stale" | "unknown" = "unknown";
+let _botConnected = false;
+let _botLogin: string | null = null;
+let _botDisplayName: string | null = null;
 
 const CONFIG_STALE_THRESHOLD_MS = 600_000;
 
@@ -48,6 +57,10 @@ export function setHealthFlags(flags: {
   llmHealthy?: "healthy" | "unhealthy" | "unknown";
   helixHealthy?: "healthy" | "unhealthy" | "unknown";
   compactionHealthy?: "healthy" | "stale" | "unknown";
+  botConnected?: boolean;
+  /** Pass `null` explicitly to clear the bot account (disconnect). */
+  botLogin?: string | null;
+  botDisplayName?: string | null;
 }) {
   if (flags.authState !== undefined) _authState = flags.authState;
   if (flags.lastConfigFetch !== undefined) _lastConfigFetch = flags.lastConfigFetch;
@@ -57,6 +70,9 @@ export function setHealthFlags(flags: {
   if (flags.llmHealthy !== undefined) _llmHealthy = flags.llmHealthy;
   if (flags.helixHealthy !== undefined) _helixHealthy = flags.helixHealthy;
   if (flags.compactionHealthy !== undefined) _compactionHealthy = flags.compactionHealthy;
+  if (flags.botConnected !== undefined) _botConnected = flags.botConnected;
+  if (flags.botLogin !== undefined) _botLogin = flags.botLogin;
+  if (flags.botDisplayName !== undefined) _botDisplayName = flags.botDisplayName;
 }
 
 function getHealth(): HealthStatus {
@@ -110,6 +126,9 @@ function getHealth(): HealthStatus {
     safeMode: _safeMode,
     paused: isPaused(),
     engineMode: getEngineMode(),
+    botConnected: _botConnected,
+    botLogin: _botLogin,
+    botDisplayName: _botDisplayName,
     version: "0.1.0",
     issues,
   };
