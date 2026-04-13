@@ -3,6 +3,9 @@ build/
 dist/
 node_modules/
 
+# Eval reports — JSON snapshots from local eval runs, not committed
+eval/reports/
+
 # Test artifacts
 codex_patch_test.txt
 *.tmp
