@@ -18,11 +18,12 @@ const FIXTURES_DIR = path.join(import.meta.dirname || process.cwd(), "../../eval
 // Default eval settings (matches production defaults)
 const EVAL_SETTINGS: BotSettings = {
   botName: "Auto_Mark",
+  botAliases: ["automark", "auto mark", "auto-mark", "robot mark"],
   personaSummary: "You are Auto_Mark, a resident AI mod and robotic co-host. Self-aware, witty, sarcastic, playful. Prioritize helpful answers, then personality. Keep replies to 1-2 sentences. No hate speech or harassment.",
   replyFrequency: "medium",
   snarkLevel: 80,
   loreIntensity: 70,
-  maxReplyLength: 140,
+  maxReplyLength: 250,
   offTopicTolerance: "moderate",
   memoryRetentionDays: 90,
   compactionFrequency: "every_stream",

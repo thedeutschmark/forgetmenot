@@ -76,28 +76,13 @@ export function parseReplyWithAction(rawText: string): ParsedReply {
  * Only included when action engine is active.
  */
 export function getActionPromptSuffix(enabledClasses: Set<string>): string {
-  const lines = [
-    "",
-    "You may optionally propose ONE action by including an ACTION block at the end of your reply:",
-    "[ACTION: action_type target=username duration=N reason=short_reason]",
-    "",
-    "Available actions:",
-  ];
-
+  const actions: string[] = [];
   if (enabledClasses.has("A")) {
-    lines.push("- reply_extra: send an additional message (include message= param)");
-    lines.push("- clip_mark: flag this moment for clipping");
-    lines.push("- joke_flag: tag a running joke for memory");
-    lines.push("- warning_playful: playful warning (include message= param)");
+    actions.push("reply_extra(message=)", "clip_mark", "joke_flag", "warning_playful(message=)");
   }
-
   if (enabledClasses.has("B")) {
-    lines.push("- timeout_funny: short joke timeout (include target= duration= reason=)");
+    actions.push("timeout_funny(target= duration= reason=)");
   }
-
-  lines.push("");
-  lines.push("If no action is appropriate, do NOT include an ACTION block.");
-  lines.push("The action is a suggestion — it may be denied by policy.");
-
-  return lines.join("\n");
+  if (actions.length === 0) return "";
+  return `Optional: append [ACTION: name key=val] at end of reply. Available: ${actions.join(", ")}. Omit if none fits — may be denied by policy.`;
 }

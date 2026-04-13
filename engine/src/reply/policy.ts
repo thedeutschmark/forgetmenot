@@ -49,6 +49,21 @@ export function checkReplyPolicy(
   return { allowed: true, reason: "ok" };
 }
 
+/**
+ * Check whether a chat message mentions the bot. Matches botName OR any alias,
+ * case-insensitive substring. Aliases come from BotSettings.botAliases — users
+ * configure these in the toolkit (e.g. "automark", "auto mark", "robot mark"
+ * for a bot named "Auto_Mark").
+ */
+export function isMentionOfBot(message: string, settings: BotSettings): boolean {
+  const lower = message.toLowerCase();
+  if (lower.includes(settings.botName.toLowerCase())) return true;
+  for (const alias of settings.botAliases || []) {
+    if (alias && lower.includes(alias.toLowerCase())) return true;
+  }
+  return false;
+}
+
 export function recordReply(targetLogin: string): void {
   setCooldown("reply:global", GLOBAL_COOLDOWN_MS);
   setCooldown(`reply:user:${targetLogin.toLowerCase()}`, PER_USER_COOLDOWN_MS);
@@ -68,5 +83,30 @@ export function validateReplyText(text: string, settings: BotSettings): string |
     cleaned = cleaned.slice(0, maxChars).trim();
   }
 
+  // If the LLM hit max_tokens and we got a dangling fragment, trim back to
+  // the last complete sentence. Avoids mid-word / mid-clause cutoffs like
+  // "Define "alive." My" that read as broken.
+  cleaned = trimToCompleteSentence(cleaned);
+
   return cleaned || null;
+}
+
+/**
+ * If the text ends mid-sentence, trim back to the last sentence terminator.
+ * Keeps the whole thing if no terminator is found (better than empty).
+ */
+function trimToCompleteSentence(text: string): string {
+  // Terminal characters that signal a complete thought.
+  // Includes closing quotes/brackets immediately after punctuation.
+  if (/[.!?…][\s"')\]}]*$/.test(text)) return text;
+
+  // Find the last sentence terminator (and its trailing quote/bracket if any).
+  const match = text.match(/^(.*[.!?…][\s"')\]}]*)(?:\s|$)/);
+  if (match && match[1].length >= 10) {
+    return match[1].trim();
+  }
+
+  // No good split point — keep as is. Better a slightly truncated reply
+  // than nothing at all.
+  return text;
 }

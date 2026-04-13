@@ -5,6 +5,7 @@ engine/node_modules/
 app/forgetmenot.exe
 app/forgetmenot.exe.sha256
 app/embedded/forgetmenot.exe
+app/icons/*-preview.png
 
 # Release staging (generated locally, not committed)
 RELEASE_NOTES_*.md
