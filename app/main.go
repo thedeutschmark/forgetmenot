@@ -36,7 +36,7 @@ const (
 	mutexName    = "Global\\ForgetMeNotTraySingleInstance"
 )
 
-// Embedded icons (4 colored circles)
+// Embedded flower icons (center color carries runtime status)
 //go:embed icons/healthy.ico
 var iconHealthy []byte
 

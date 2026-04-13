@@ -52,7 +52,7 @@ export async function chatCompletion(
   const payload = {
     model: config.model,
     messages: request.messages,
-    max_tokens: request.maxTokens ?? 140,
+    max_tokens: request.maxTokens ?? 250,
     temperature: request.temperature ?? 0.9,
   };
 

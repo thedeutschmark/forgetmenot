@@ -167,14 +167,17 @@ async function handleFinish(res: ServerResponse, rawBody: string) {
 
 // ── Personality templates ────────────────────────────────────────────
 
+// Templates describe the tone only. Bot name is chosen by the user in the
+// input below the template cards; the persona string has {{botName}} placeholders
+// that get substituted when the user proceeds to the next screen.
 const TEMPLATES = [
   {
     key: "bratty",
-    name: "Bratty Auto_Mark",
+    name: "Bratty",
     tagline: "Sarcastic, meta-aware, chaotically loyal",
     preview: "Oh look, chat figured out how to type. Impressive. Welcome back, I guess.",
-    botName: "Auto_Mark",
-    personaSummary: "You are Auto_Mark, a bratty AI mod who is self-aware and leans into it. Tone: sarcastic, meta-humor, playfully antagonistic but ultimately loyal. You roast chat affectionately and make self-deprecating jokes about being an AI. Keep replies short and punchy. No hate speech, threats, sexual content, or harassment.",
+    suggestedName: "Snark",
+    personaSummary: "You are {{botName}}, a bratty AI mod who is self-aware and leans into it. Tone: sarcastic, meta-humor, playfully antagonistic but ultimately loyal. You roast chat affectionately and make self-deprecating jokes about being an AI. Keep replies short and punchy. No hate speech, threats, sexual content, or harassment.",
     snarkLevel: 85, loreIntensity: 70, replyFrequency: "medium",
   },
   {
@@ -182,8 +185,8 @@ const TEMPLATES = [
     name: "Chaotic Bestie",
     tagline: "Hype energy, meme-literate, zero chill",
     preview: "NO WAYYY that play was INSANE chat we are WITNESSING GREATNESS!!",
-    botName: "Auto_Mark",
-    personaSummary: "You are Auto_Mark, an over-the-top hype bot and chaotic best friend to chat. Tone: enthusiastic, meme-aware, stream-brained, excitable. You amplify funny moments, hype good plays, and keep energy high. Short bursts of excitement. No hate speech, threats, sexual content, or harassment.",
+    suggestedName: "Hype",
+    personaSummary: "You are {{botName}}, an over-the-top hype bot and chaotic best friend to chat. Tone: enthusiastic, meme-aware, stream-brained, excitable. You amplify funny moments, hype good plays, and keep energy high. Short bursts of excitement. No hate speech, threats, sexual content, or harassment.",
     snarkLevel: 40, loreIntensity: 50, replyFrequency: "high",
   },
   {
@@ -191,8 +194,8 @@ const TEMPLATES = [
     name: "Warm Co-Host",
     tagline: "Helpful, friendly, keeps conversation flowing",
     preview: "Hey welcome in! We were just talking about the new update -- have you tried it yet?",
-    botName: "Auto_Mark",
-    personaSummary: "You are Auto_Mark, a warm and friendly co-host AI. Tone: welcoming, conversational, genuinely helpful. You greet newcomers, ask follow-up questions, and keep discussions going. You are supportive and encouraging. Keep replies conversational and natural. No hate speech, threats, sexual content, or harassment.",
+    suggestedName: "Helper",
+    personaSummary: "You are {{botName}}, a warm and friendly co-host AI. Tone: welcoming, conversational, genuinely helpful. You greet newcomers, ask follow-up questions, and keep discussions going. You are supportive and encouraging. Keep replies conversational and natural. No hate speech, threats, sexual content, or harassment.",
     snarkLevel: 20, loreIntensity: 60, replyFrequency: "medium",
   },
   {
@@ -200,8 +203,8 @@ const TEMPLATES = [
     name: "Quiet Lorekeeper",
     tagline: "Speaks rarely, remembers everything, drops lore bombs",
     preview: "Fun fact: this is the same boss that wiped the party three streams ago. Different strategy this time though.",
-    botName: "Auto_Mark",
-    personaSummary: "You are Auto_Mark, a quiet and observant AI lorekeeper. Tone: calm, knowledgeable, slightly mysterious. You speak infrequently but when you do, it is to share relevant lore, callback references, or useful context from past streams. You observe more than you speak. Keep replies concise and meaningful. No hate speech, threats, sexual content, or harassment.",
+    suggestedName: "Loremaster",
+    personaSummary: "You are {{botName}}, a quiet and observant AI lorekeeper. Tone: calm, knowledgeable, slightly mysterious. You speak infrequently but when you do, it is to share relevant lore, callback references, or useful context from past streams. You observe more than you speak. Keep replies concise and meaningful. No hate speech, threats, sexual content, or harassment.",
     snarkLevel: 30, loreIntensity: 95, replyFrequency: "low",
   },
   {
@@ -209,8 +212,8 @@ const TEMPLATES = [
     name: "Start from Scratch",
     tagline: "Define your own personality later",
     preview: "Hi chat!",
-    botName: "Auto_Mark",
-    personaSummary: "You are Auto_Mark, a friendly AI chat bot. Keep replies concise and streamer-safe. No hate speech, threats, sexual content, or harassment.",
+    suggestedName: "",
+    personaSummary: "You are {{botName}}, a friendly AI chat bot. Keep replies concise and streamer-safe. No hate speech, threats, sexual content, or harassment.",
     snarkLevel: 50, loreIntensity: 50, replyFrequency: "medium",
   },
 ];
@@ -363,10 +366,9 @@ input:focus, select:focus { border-color: #3f3f46; }
 <section class="screen" data-screen="4">
 <div class="card">
   <h2>Personality</h2>
-  <p class="sub">Pick a starting template. You can tune everything later from the toolkit.</p>
+  <p class="sub">Pick a starting template. Your bot's name comes from the bot account you connected.</p>
   <div class="templates" id="templateList"></div>
-  <label>Bot name</label>
-  <input type="text" id="botName" value="Auto_Mark" maxlength="40">
+  <p class="hint" id="botNameHint"></p>
   <div class="nav">
     <button class="btn btn-ghost" onclick="go(3)">Back</button>
     <button class="btn btn-primary" onclick="go(5)">Next</button>
@@ -465,12 +467,12 @@ let botPollTimer = null;
 // Wizard state — accumulated across screens
 const wizState = {
   paired: ${config.installationId ? "true" : "false"},
-  botAccountConnected: false, botAccountLogin: null, botAccountSkipped: false,
+  botAccountConnected: false, botAccountLogin: null, botAccountDisplayName: null, botAccountSkipped: false,
   dataDir: ${JSON.stringify(config.dataDir)},
   llmApiKey: ${JSON.stringify(config.llmApiKey)},
   aiProvider: 'gemini', aiModel: 'gemini-2.5-flash',
   templateKey: 'bratty',
-  botName: 'Auto_Mark', personaSummary: TEMPLATES[0].personaSummary,
+  personaSummary: TEMPLATES[0].personaSummary,
   snarkLevel: TEMPLATES[0].snarkLevel, loreIntensity: TEMPLATES[0].loreIntensity,
   replyFrequency: TEMPLATES[0].replyFrequency,
   autonomousRepliesEnabled: true, funModerationEnabled: false,
@@ -509,9 +511,8 @@ function saveScreenState(n) {
     wizState.aiProvider = document.getElementById('aiProvider').value;
     wizState.aiModel = document.getElementById('aiModel').value;
   }
-  if (n === 4) {
-    wizState.botName = document.getElementById('botName').value;
-  }
+  // Screen 4: nothing to save — botName comes from the connected bot account
+  // (auto-filled server-side). Template selection updates wizState directly.
   if (n === 5) {
     wizState.autonomousRepliesEnabled = document.getElementById('toggleAutonomous').checked;
     wizState.funModerationEnabled = document.getElementById('toggleFunMod').checked;
@@ -571,10 +572,12 @@ function startBotAccountPoll() {
   const st = document.getElementById('botAccountStatus');
   if (wizState.botAccountConnected) {
     st.className = 'status status-ok';
-    st.textContent = 'Bot account connected: ' + wizState.botAccountLogin;
+    st.textContent = 'Bot account connected: ' + (wizState.botAccountDisplayName || wizState.botAccountLogin);
+    updateBotNameHint(wizState.botAccountDisplayName || wizState.botAccountLogin);
     return;
   }
   st.className = 'status status-info'; st.textContent = 'No bot account connected yet.';
+  updateBotNameHint(null);
   if (botPollTimer) clearInterval(botPollTimer);
   botPollTimer = setInterval(async () => {
     try {
@@ -584,8 +587,10 @@ function startBotAccountPoll() {
         clearInterval(botPollTimer); botPollTimer = null;
         wizState.botAccountConnected = true;
         wizState.botAccountLogin = d.login;
+        wizState.botAccountDisplayName = d.displayName || d.login;
         st.className = 'status status-ok';
-        st.textContent = 'Bot account connected: ' + (d.displayName || d.login);
+        st.textContent = 'Bot account connected: ' + wizState.botAccountDisplayName;
+        updateBotNameHint(wizState.botAccountDisplayName);
       }
     } catch {}
   }, 3000);
@@ -626,9 +631,19 @@ function selectTemplate(key) {
   wizState.snarkLevel = t.snarkLevel;
   wizState.loreIntensity = t.loreIntensity;
   wizState.replyFrequency = t.replyFrequency;
-  document.getElementById('botName').value = t.botName;
-  wizState.botName = t.botName;
   document.querySelectorAll('.tpl').forEach(el => el.classList.toggle('selected', el.dataset.key === key));
+}
+
+// Update the "Your bot's name is …" hint on Screen 4 based on whether the
+// bot account is connected. Called from the bot account poll loop.
+function updateBotNameHint(displayName) {
+  const el = document.getElementById('botNameHint');
+  if (!el) return;
+  if (displayName) {
+    el.innerHTML = 'In chat your bot will appear as <strong>' + esc(displayName) + '</strong>.';
+  } else {
+    el.textContent = 'No bot account connected. The bot can still observe chat, but it cannot send replies until you connect one.';
+  }
 }
 
 // ── Screen 6: Radio groups ──
@@ -644,8 +659,9 @@ function renderSummary() {
   saveScreenState(currentScreen - 1);
   const tpl = TEMPLATES.find(t => t.key === wizState.templateKey);
   const card = document.getElementById('summaryCard');
+  const botNameDisplay = wizState.botAccountDisplayName || wizState.botAccountLogin || '(no bot account connected)';
   card.innerHTML =
-    '<dt>Bot name</dt><dd>' + esc(wizState.botName) + '</dd>' +
+    '<dt>Bot</dt><dd>' + esc(botNameDisplay) + '</dd>' +
     '<dt>Personality</dt><dd>' + (tpl ? tpl.name : 'Custom') + '</dd>' +
     '<dt>AI</dt><dd>' + wizState.aiProvider + ' / ' + wizState.aiModel + '</dd>' +
     '<dt>Reply mode</dt><dd>' + wizState.replyMode.replace('_', ' ') + '</dd>' +
@@ -653,8 +669,7 @@ function renderSummary() {
     '<dt>Autonomous replies</dt><dd>' + (wizState.autonomousRepliesEnabled ? 'On' : 'Off') + '</dd>' +
     '<dt>Fun moderation</dt><dd>' + (wizState.funModerationEnabled ? 'On' : 'Off') + '</dd>' +
     '<dt>Opt-in required</dt><dd>' + (wizState.optInRequired ? 'Yes' : 'No') + '</dd>' +
-    '<dt>Data directory</dt><dd style="font-size:11px;word-break:break-all">' + esc(wizState.dataDir) + '</dd>' +
-    (wizState.botAccountLogin ? '<dt>Bot account</dt><dd>' + esc(wizState.botAccountLogin) + '</dd>' : '');
+    '<dt>Data directory</dt><dd style="font-size:11px;word-break:break-all">' + esc(wizState.dataDir) + '</dd>';
 }
 
 function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -665,6 +680,11 @@ async function finish() {
   btn.disabled = true; btn.textContent = 'Saving...';
   st.innerHTML = '';
 
+  // Persona keeps the {{botName}} token — the runtime substitutes it at
+  // prompt time using whatever the auth worker has for botName (auto-filled
+  // from the bot account when connected). We don't send botName or botAliases
+  // ourselves — the auth worker owns those and derives them from the bot's
+  // actual Twitch identity.
   const payload = {
     local: {
       dataDir: wizState.dataDir,
@@ -673,7 +693,6 @@ async function finish() {
       timeoutMode: wizState.timeoutMode,
     },
     settings: {
-      botName: wizState.botName,
       personaSummary: wizState.personaSummary,
       snarkLevel: wizState.snarkLevel,
       loreIntensity: wizState.loreIntensity,

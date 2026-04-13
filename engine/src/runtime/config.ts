@@ -17,6 +17,7 @@ export interface LocalConfig {
 
 export interface BotSettings {
   botName: string;
+  botAliases: string[];
   personaSummary: string;
   replyFrequency: "low" | "medium" | "high";
   snarkLevel: number;

@@ -10,7 +10,7 @@ import { DatabaseSync } from "node:sqlite";
 import { MIGRATIONS } from "../db/schema.js";
 import { buildReplyContext } from "../memory/context.js";
 import { chatCompletion } from "../llm/adapter.js";
-import { checkReplyPolicy, recordReply, validateReplyText } from "../reply/policy.js";
+import { checkReplyPolicy, isMentionOfBot, recordReply, validateReplyText } from "../reply/policy.js";
 import { parseReplyWithAction } from "../actions/proposals.js";
 import { evaluateAction } from "../actions/policy.js";
 import type { EvalFixture, EvalResult, EvalReport, FixtureExpectation } from "./types.js";
@@ -97,7 +97,7 @@ export async function runFixture(
     `).run(msg.twitchId, msg.login, msg.login);
 
     // Determine if the engine would reply
-    const isMention = msg.text.toLowerCase().includes(settings.botName.toLowerCase());
+    const isMention = isMentionOfBot(msg.text, settings);
     const policyCheck = checkReplyPolicy(settings, policy, msg.login);
 
     let replied = false;
