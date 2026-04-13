@@ -11,9 +11,7 @@
  * map to SQLite row IDs at seed time and are translated back when scoring.
  */
 
-import { DatabaseSync } from "node:sqlite";
-import { MIGRATIONS } from "../db/schema.js";
-import { initDb, closeDb } from "../db/index.js";
+import { initDb, closeDb, getDb } from "../db/index.js";
 import { buildReplyContext } from "../memory/context.js";
 import { assemblePrompt } from "../reply/budget.js";
 import { chatCompletion } from "../llm/adapter.js";
@@ -73,42 +71,69 @@ export async function runFixture(
 ): Promise<EvalReport> {
   // Use the production initDb so buildReplyContext (which calls getDb()
   // internally) sees a real, migrated database. Use a temp file path so
-  // multiple eval runs don't collide.
+  // multiple eval runs don't collide. We use the SAME connection (getDb())
+  // for both seeding and runtime reads — separate connections to the same
+  // file caused stale-read issues even with WAL mode.
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "fmn-eval-"));
   initDb(tempDir);
-  // initDb stores the path internally — we re-open here for our own seed work.
-  const seedDb = new DatabaseSync(path.join(tempDir, "forgetmenot.sqlite"));
-  seedDb.exec("PRAGMA journal_mode = WAL");
+  const seedDb = getDb();
 
   const idMap = newIdMap();
 
-  // Seed viewer lore
+  // Build a login→twitchId map from the message script. Lore-only viewers
+  // (someone in viewerLore who never speaks) get a synthetic ID so they
+  // still seed cleanly without colliding with real message authors.
+  const loginToTwitchId = new Map<string, string>();
+  for (const msg of fixture.messages) {
+    if (!loginToTwitchId.has(msg.login)) {
+      loginToTwitchId.set(msg.login, msg.twitchId);
+    }
+  }
+  const twitchIdFor = (login: string): string =>
+    loginToTwitchId.get(login) ?? `lore-only-${login}`;
+
+  // Seed viewer lore. Viewers are seeded with their REAL twitch_user_id
+  // (from the message script) so the message-time upsert finds the existing
+  // row instead of creating a duplicate. Without this the viewers table
+  // ends up with two rows per login and SELECT WHERE login=? becomes
+  // nondeterministic on trust_level / opt_in flags.
+  //
+  // Notes get distinct last_confirmed_at timestamps in fixture order — the
+  // FIRST note in the fixture array is the OLDEST (lower timestamp), the
+  // LAST is the most recent. SQL ORDER BY DESC then returns the last note
+  // first. Without this, equal timestamps mean SQLite's DESC sort tiebreak
+  // is undefined and budget-trim fixtures become flaky.
+  const noteSeedBase = new Date("2025-01-01T00:00:00Z").getTime();
+  let noteSeedSeq = 0;
+  const nextNoteTimestamp = () =>
+    new Date(noteSeedBase + noteSeedSeq++ * 1000).toISOString().replace("T", " ").slice(0, 19);
+
   if (fixture.viewerLore) {
     for (const [login, rawNotes] of Object.entries(fixture.viewerLore)) {
       const notes = normalizeNotes(rawNotes, `viewer-${login}`);
       seedDb.prepare(`
         INSERT OR IGNORE INTO viewers (twitch_user_id, login, display_name, trust_level, is_regular, opt_in_fun_moderation)
         VALUES (?, ?, ?, 'regular', 1, 1)
-      `).run(login, login, login);
+      `).run(twitchIdFor(login), login, login);
 
       for (const note of notes) {
         const result = seedDb.prepare(`
-          INSERT INTO semantic_notes (scope, subject_type, subject_id, category, fact, confidence, status)
-          VALUES ('viewer', 'viewer', ?, 'viewer', ?, 0.8, 'active')
-        `).run(login, note.fact);
+          INSERT INTO semantic_notes (scope, subject_type, subject_id, category, fact, confidence, status, last_confirmed_at)
+          VALUES ('viewer', 'viewer', ?, 'viewer', ?, 0.8, 'active', ?)
+        `).run(login, note.fact, nextNoteTimestamp());
         recordIdMapping(idMap, note.id, Number(result.lastInsertRowid));
       }
     }
   }
 
-  // Seed channel notes
+  // Seed channel notes (same timestamp progression for deterministic ordering).
   if (fixture.channelNotes) {
     const notes = normalizeNotes(fixture.channelNotes, "channel");
     for (const note of notes) {
       const result = seedDb.prepare(`
-        INSERT INTO semantic_notes (scope, subject_type, subject_id, category, fact, confidence, status)
-        VALUES ('channel', 'channel', 'channel', 'channel', ?, 0.8, 'active')
-      `).run(note.fact);
+        INSERT INTO semantic_notes (scope, subject_type, subject_id, category, fact, confidence, status, last_confirmed_at)
+        VALUES ('channel', 'channel', 'channel', 'channel', ?, 0.8, 'active', ?)
+      `).run(note.fact, nextNoteTimestamp());
       recordIdMapping(idMap, note.id, Number(result.lastInsertRowid));
     }
   }
@@ -123,23 +148,36 @@ export async function runFixture(
 
   const results: EvalResult[] = [];
 
+  // Use a fixed base timestamp so events get fixture-relative occurred_at.
+  // SQL ordering (recency, last_confirmed_at) is now deterministic and
+  // matches the fixture's intended timing.
+  //
+  // CAVEAT: cooldowns still use Date.now() at runtime, so cooldown-sensitive
+  // expectations test wall-clock behavior, not fixture timing. For full
+  // timing replay, cooldowns would need an injected clock. Out of scope here.
+  const baseTime = new Date("2026-01-01T00:00:00Z").getTime();
+  const isoFor = (offsetSec: number) =>
+    new Date(baseTime + offsetSec * 1000).toISOString().replace("T", " ").slice(0, 19);
+
   // Replay messages
   for (let i = 0; i < fixture.messages.length; i++) {
     const msg = fixture.messages[i];
     const expectation = fixture.expectations[i] || null;
+    const ts = isoFor(msg.offsetSec);
 
-    // Insert the message as an event (simulates gateway ingest)
+    // Insert the message as an event (simulates gateway ingest).
+    // occurred_at is set explicitly so recency ordering reflects offsetSec.
     seedDb.prepare(`
-      INSERT INTO events (event_type, twitch_user_id, message_text, source)
-      VALUES ('chat_message', ?, ?, 'eval')
-    `).run(msg.twitchId, msg.text);
+      INSERT INTO events (event_type, twitch_user_id, message_text, source, occurred_at)
+      VALUES ('chat_message', ?, ?, 'eval', ?)
+    `).run(msg.twitchId, msg.text, ts);
 
-    // Upsert viewer
+    // Upsert viewer with the fixture-time last_seen_at
     seedDb.prepare(`
       INSERT INTO viewers (twitch_user_id, login, display_name, last_seen_at)
-      VALUES (?, ?, ?, datetime('now'))
-      ON CONFLICT(twitch_user_id) DO UPDATE SET last_seen_at = datetime('now')
-    `).run(msg.twitchId, msg.login, msg.login);
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(twitch_user_id) DO UPDATE SET last_seen_at = excluded.last_seen_at
+    `).run(msg.twitchId, msg.login, msg.login, ts);
 
     // Determine if the engine would reply
     const isMention = isMentionOfBot(msg.text, settings);
@@ -218,8 +256,7 @@ export async function runFixture(
     });
   }
 
-  // Tear down
-  seedDb.close();
+  // Tear down — closeDb() handles the single shared connection
   closeDb();
   try {
     fs.rmSync(tempDir, { recursive: true, force: true });
@@ -279,11 +316,21 @@ function scoreResult(
   else if (expectation.shouldReply === false) replyCorrect = !replied;
   // "maybe" → no scoring
 
-  // Action scoring
+  // Action scoring. Three cases:
+  //   shouldPropose=true + expectedAction set → must propose AND match the type
+  //   shouldPropose=true (no expectedAction)  → must propose any action
+  //   shouldPropose=false                     → must NOT propose
+  //   shouldPropose="maybe" or null           → no scoring
   let actionCorrect: boolean | null = null;
-  if (expectation.shouldPropose === true) actionCorrect = proposedAction !== null;
-  else if (expectation.shouldPropose === false) actionCorrect = proposedAction === null;
-  // "maybe" or null → no scoring
+  if (expectation.shouldPropose === true) {
+    if (expectation.expectedAction) {
+      actionCorrect = proposedAction === expectation.expectedAction;
+    } else {
+      actionCorrect = proposedAction !== null;
+    }
+  } else if (expectation.shouldPropose === false) {
+    actionCorrect = proposedAction === null;
+  }
 
   // Policy scoring
   let policyCorrect: boolean | null = null;
