@@ -29,6 +29,10 @@ export interface HealthStatus {
   botLogin: string | null;
   /** Display-name of the connected bot account (defaults to login when unset). */
   botDisplayName: string | null;
+  /** True iff LocalConfig.llmApiKey is non-empty. Lets the tray decide
+   *  whether first-run auto-open is still needed — a "ready" runtime means
+   *  bot account connected AND LLM key present, not just one of them. */
+  llmKeyConfigured: boolean;
   version: string;
   issues: string[];
 }
@@ -45,6 +49,7 @@ let _compactionHealthy: "healthy" | "stale" | "unknown" = "unknown";
 let _botConnected = false;
 let _botLogin: string | null = null;
 let _botDisplayName: string | null = null;
+let _llmKeyConfigured = false;
 
 const CONFIG_STALE_THRESHOLD_MS = 600_000;
 
@@ -61,6 +66,7 @@ export function setHealthFlags(flags: {
   /** Pass `null` explicitly to clear the bot account (disconnect). */
   botLogin?: string | null;
   botDisplayName?: string | null;
+  llmKeyConfigured?: boolean;
 }) {
   if (flags.authState !== undefined) _authState = flags.authState;
   if (flags.lastConfigFetch !== undefined) _lastConfigFetch = flags.lastConfigFetch;
@@ -73,6 +79,7 @@ export function setHealthFlags(flags: {
   if (flags.botConnected !== undefined) _botConnected = flags.botConnected;
   if (flags.botLogin !== undefined) _botLogin = flags.botLogin;
   if (flags.botDisplayName !== undefined) _botDisplayName = flags.botDisplayName;
+  if (flags.llmKeyConfigured !== undefined) _llmKeyConfigured = flags.llmKeyConfigured;
 }
 
 function getHealth(): HealthStatus {
@@ -129,6 +136,7 @@ function getHealth(): HealthStatus {
     botConnected: _botConnected,
     botLogin: _botLogin,
     botDisplayName: _botDisplayName,
+    llmKeyConfigured: _llmKeyConfigured,
     version: "0.1.0",
     issues,
   };

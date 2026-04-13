@@ -88,8 +88,14 @@ async function main() {
       },
     });
 
-    // Also wire manual setup page (fallback/reconfigure)
+    // Also wire manual setup page (fallback/reconfigure). The setSetupContext
+    // callback fires on any POST /setup — including when the user pastes an
+    // AI key on the localhost landing. Re-flag llmKeyConfigured so the tray
+    // can observe the state change without a full restart.
     setSetupContext(localConfig, (newConfig) => {
+      setHealthFlags({
+        llmKeyConfigured: Boolean(newConfig.llmApiKey || process.env.BOT_LLM_API_KEY),
+      });
       if (newConfig.installationId && newConfig.installationSecret) {
         setWizardContext(newConfig, (updatedConfig) => {
           console.log("[forgetmenot] Onboarding complete. Transitioning to operational mode...");
@@ -129,6 +135,11 @@ function startOperationalMode(localConfig: LocalConfig, _server: http.Server): (
         botConnected: bundle.botAccount !== null,
         botLogin: bundle.botAccount?.login ?? null,
         botDisplayName: bundle.botAccount?.displayName ?? bundle.botAccount?.login ?? null,
+        // Track local AI key presence (env var fallback OR on-disk config) so
+        // the tray can tell "fully ready" from "bot connected but still needs
+        // a key." Without this, first-run auto-open fires on no-bot-account
+        // but misses the common has-bot-needs-key case.
+        llmKeyConfigured: Boolean(localConfig.llmApiKey || process.env.BOT_LLM_API_KEY),
       });
 
       if (isFirst) {
