@@ -179,6 +179,9 @@ export async function onChatMessage(
         stablePrefix: metrics.stablePrefixTokens,
         sectionsDropped: metrics.sectionsDropped,
         finalCounts: metrics.finalSectionCounts,
+        // Real SQLite row IDs the LLM actually saw — for cross-referencing
+        // production replies against the eval baseline.
+        retainedNoteIds: metrics.retainedNoteIds,
         contextHash,
         mode: config.mode,
         hasAction: parsed.proposal !== null,

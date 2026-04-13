@@ -16,6 +16,9 @@ export interface ViewerContext {
   isVip: boolean;
   optInFunModeration: boolean;
   notes: string[];
+  /** Parallel array — note row IDs in the same order as `notes`. Used by
+   *  eval scoring and production observability. Prompt rendering ignores it. */
+  noteIds: number[];
 }
 
 export interface ReplyContext {
@@ -25,6 +28,8 @@ export interface ReplyContext {
   channelCategory: string | null;
   recentEpisodes: string[];
   recentNotes: string[];
+  /** Parallel array — channel note row IDs in the same order as `recentNotes`. */
+  recentNoteIds: number[];
 }
 
 /**
@@ -64,12 +69,12 @@ export function buildReplyContext(
     // — see notes.ts line 127). Using twitch_user_id here returns nothing.
     const notes = db
       .prepare(`
-        SELECT fact FROM semantic_notes
+        SELECT id, fact FROM semantic_notes
         WHERE scope = 'viewer' AND subject_id = ? AND status = 'active'
         ORDER BY last_confirmed_at DESC
         LIMIT 10
       `)
-      .all(String(viewer.login || "").toLowerCase()) as Array<{ fact: string }>;
+      .all(String(viewer.login || "").toLowerCase()) as Array<{ id: number; fact: string }>;
 
     targetViewer = {
       login: String(viewer.login || ""),
@@ -80,6 +85,7 @@ export function buildReplyContext(
       isVip: Boolean(viewer.is_vip),
       optInFunModeration: Boolean(viewer.opt_in_fun_moderation),
       notes: notes.map((n) => n.fact),
+      noteIds: notes.map((n) => Number(n.id)),
     };
   }
 
@@ -101,12 +107,12 @@ export function buildReplyContext(
   // Channel-level semantic notes
   const channelNotes = db
     .prepare(`
-      SELECT fact FROM semantic_notes
+      SELECT id, fact FROM semantic_notes
       WHERE scope = 'channel' AND status = 'active'
       ORDER BY last_confirmed_at DESC
       LIMIT 5
     `)
-    .all() as Array<{ fact: string }>;
+    .all() as Array<{ id: number; fact: string }>;
 
   return {
     recentMessages: recentMessages.map((m) => ({
@@ -119,5 +125,6 @@ export function buildReplyContext(
     channelCategory: channel?.stream_category ?? null,
     recentEpisodes: episodes.map((e) => e.summary),
     recentNotes: channelNotes.map((n) => n.fact),
+    recentNoteIds: channelNotes.map((n) => Number(n.id)),
   };
 }

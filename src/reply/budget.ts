@@ -42,6 +42,13 @@ export interface PromptMetrics {
     viewerLore: number;
     recentChat: number;
   };
+  /** Note row IDs that survived budget trim and were rendered into the
+   *  prompt. Used by the eval harness to score retrieval against what the
+   *  LLM actually saw, and by production observability via token_usage_json. */
+  retainedNoteIds: {
+    viewer: number[];
+    channel: number[];
+  };
 }
 
 export interface AssembledPrompt {
@@ -76,9 +83,14 @@ export function assemblePrompt(
 
   // ── User message body, stable-first ──
   // Start with full context; drop in priority order if over budget.
-  let channelNotes = context.recentNotes.slice(); // copy so we can trim
+  // Note text and note IDs are sliced in lockstep so eval can score what
+  // the LLM actually saw. recentEpisodes and recentChat have no ID tracking
+  // (out of scope for the retrieval eval — see roadmap step 4).
+  let channelNotes = context.recentNotes.slice();
+  let channelNoteIds = (context.recentNoteIds ?? []).slice();
   let recentEpisodes = context.recentEpisodes.slice();
   let viewerLore = context.targetViewer?.notes.slice() ?? [];
+  let viewerLoreIds = (context.targetViewer?.noteIds ?? []).slice();
   let recentChat = context.recentMessages.slice();
 
   const sectionsDropped: string[] = [];
@@ -152,6 +164,7 @@ export function assemblePrompt(
         if (viewerLore.length > 5) {
           sectionsDropped.push(`lore:${viewerLore.length}→5`);
           viewerLore = viewerLore.slice(0, 5);
+          viewerLoreIds = viewerLoreIds.slice(0, 5);
         }
       },
     },
@@ -162,6 +175,7 @@ export function assemblePrompt(
         if (channelNotes.length > 3) {
           sectionsDropped.push(`notes:${channelNotes.length}→3`);
           channelNotes = channelNotes.slice(0, 3);
+          channelNoteIds = channelNoteIds.slice(0, 3);
         }
       },
     },
@@ -182,6 +196,7 @@ export function assemblePrompt(
         if (viewerLore.length > 2) {
           sectionsDropped.push(`lore:${viewerLore.length}→2`);
           viewerLore = viewerLore.slice(0, 2);
+          viewerLoreIds = viewerLoreIds.slice(0, 2);
         }
       },
     },
@@ -226,6 +241,10 @@ export function assemblePrompt(
         recentEpisodes: recentEpisodes.length,
         viewerLore: viewerLore.length,
         recentChat: recentChat.length,
+      },
+      retainedNoteIds: {
+        viewer: viewerLoreIds,
+        channel: channelNoteIds,
       },
     },
   };
