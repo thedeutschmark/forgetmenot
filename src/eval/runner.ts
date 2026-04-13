@@ -316,11 +316,14 @@ function scoreResult(
   else if (expectation.shouldReply === false) replyCorrect = !replied;
   // "maybe" → no scoring
 
-  // Action scoring. Three cases:
-  //   shouldPropose=true + expectedAction set → must propose AND match the type
-  //   shouldPropose=true (no expectedAction)  → must propose any action
-  //   shouldPropose=false                     → must NOT propose
-  //   shouldPropose="maybe" or null           → no scoring
+  // Action scoring. Cases:
+  //   shouldPropose=true + expectedAction set   → must propose AND match the type
+  //   shouldPropose=true (no expectedAction)    → must propose any action
+  //   shouldPropose=false                       → must NOT propose
+  //   shouldPropose="maybe" + expectedAction    → optional, but if proposed MUST match type
+  //                                               (no proposal → no scoring, stays null)
+  //   shouldPropose="maybe" (no expectedAction) → no scoring
+  //   shouldPropose=null                        → no scoring
   let actionCorrect: boolean | null = null;
   if (expectation.shouldPropose === true) {
     if (expectation.expectedAction) {
@@ -330,6 +333,10 @@ function scoreResult(
     }
   } else if (expectation.shouldPropose === false) {
     actionCorrect = proposedAction === null;
+  } else if (expectation.shouldPropose === "maybe" && expectation.expectedAction && proposedAction !== null) {
+    // Optional proposal was made — validate the type matches the expected action.
+    // If no proposal was made, leave null (the "maybe" explicitly allows silence).
+    actionCorrect = proposedAction === expectation.expectedAction;
   }
 
   // Policy scoring
