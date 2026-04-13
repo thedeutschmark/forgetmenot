@@ -155,10 +155,12 @@ export async function onChatMessage(
 
     // Parse reply text and optional action proposal
     const parsed = parseReplyWithAction(response.text);
-    const replyText = validateReplyText(parsed.text, settings);
+    const replyText = validateReplyText(parsed.text, settings, response.finishReason);
 
     if (!replyText) {
-      logBlockedAttempt(login, twitchId, "validation", "empty_reply", isMention);
+      const reason =
+        response.finishReason === "length" ? "truncated_reply" : "empty_reply";
+      logBlockedAttempt(login, twitchId, "validation", reason, isMention);
       return;
     }
 

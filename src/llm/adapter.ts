@@ -20,6 +20,9 @@ export interface LlmResponse {
   text: string;
   model: string;
   tokensUsed: { prompt: number; completion: number; total: number } | null;
+  /** OpenAI-compatible finish reason. `"length"` means max_tokens was hit —
+   *  caller should assume the reply is a truncated fragment and handle it. */
+  finishReason: "stop" | "length" | "content_filter" | "tool_calls" | null;
 }
 
 interface ProviderConfig {
@@ -74,7 +77,7 @@ export async function chatCompletion(
   consecutiveLlmFailures = 0; // reset on success
 
   const data = (await res.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
+    choices?: Array<{ message?: { content?: string }; finish_reason?: string }>;
     model?: string;
     usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
   };
@@ -82,11 +85,22 @@ export async function chatCompletion(
   const text = data.choices?.[0]?.message?.content?.trim() || "";
   const usage = data.usage;
 
+  // Normalize finish_reason — OpenAI uses "stop"/"length"/"content_filter"/"tool_calls",
+  // Gemini's OpenAI-compat layer uses the same strings. Unknown values flatten to null
+  // so callers don't have to case on provider-specific quirks.
+  const rawFinish = data.choices?.[0]?.finish_reason;
+  const finishReason: LlmResponse["finishReason"] =
+    rawFinish === "stop" || rawFinish === "length" ||
+    rawFinish === "content_filter" || rawFinish === "tool_calls"
+      ? rawFinish
+      : null;
+
   return {
     text,
     model: data.model || config.model,
     tokensUsed: usage
       ? { prompt: usage.prompt_tokens || 0, completion: usage.completion_tokens || 0, total: usage.total_tokens || 0 }
       : null,
+    finishReason,
   };
 }

@@ -69,7 +69,11 @@ export function recordReply(targetLogin: string): void {
   setCooldown(`reply:user:${targetLogin.toLowerCase()}`, PER_USER_COOLDOWN_MS);
 }
 
-export function validateReplyText(text: string, settings: BotSettings): string | null {
+export function validateReplyText(
+  text: string,
+  settings: BotSettings,
+  finishReason?: "stop" | "length" | "content_filter" | "tool_calls" | null,
+): string | null {
   if (!text || text.trim().length === 0) return null;
 
   let cleaned = text.trim();
@@ -87,6 +91,16 @@ export function validateReplyText(text: string, settings: BotSettings): string |
   // the last complete sentence. Avoids mid-word / mid-clause cutoffs like
   // "Define "alive." My" that read as broken.
   cleaned = trimToCompleteSentence(cleaned);
+
+  // Truncation guard: if the provider told us finish_reason="length" AND the
+  // result still has no terminal punctuation, the reply is a cut-off fragment
+  // with no safe split point. Reject rather than send something broken like
+  // "Oh, *now* you just said this in response to me" (real example from a
+  // live run). Engine logs this as truncated_reply so the blocked-attempt
+  // stream shows it distinctly from plain empty replies.
+  if (finishReason === "length" && !/[.!?…][\s"')\]}]*$/.test(cleaned)) {
+    return null;
+  }
 
   return cleaned || null;
 }
