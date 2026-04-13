@@ -221,13 +221,19 @@ export function startHealthServer(port: number = 7331): http.Server {
 
 const TOOLKIT_URL = "https://toolkit.deutschmark.online/tools/chat-bot";
 
+// Inline base64 of services/forgetmenot-tray/icons/flower.png so the brand
+// mark renders without a second HTTP roundtrip and without coupling the
+// runtime to an asset file path. ~2.4KB embedded — kept inline to avoid
+// adding a static-asset handler for one image.
+const FLOWER_PNG_BASE64 =
+  "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";
+
 function renderRootLanding(config: LocalConfig | null, health: HealthStatus): string {
   const paired = Boolean(config?.installationId && config?.installationSecret);
   const hasKey = Boolean(config?.llmApiKey);
   const pairing = getPairingState();
 
-  // Status pill color/text mirrors the tray icon semantics so the local
-  // and tray surfaces read the same story.
+  // Status pill mirrors the tray icon semantics (yellow=healthy etc).
   const statusPill = health.paused
     ? { bg: "#71717a", text: "paused" }
     : health.status === "ok"
@@ -239,9 +245,13 @@ function renderRootLanding(config: LocalConfig | null, health: HealthStatus): st
   const botLine = health.botConnected && (health.botDisplayName || health.botLogin)
     ? `Bot account: <strong>${escapeHtml(health.botDisplayName || health.botLogin || "")}</strong> connected`
     : paired
-      ? `Bot account: <em>not connected</em> — link it in toolkit`
+      ? `Bot account: <em>not connected</em> — link in toolkit`
       : `Bot account: link in toolkit after pairing`;
 
+  // Design tokens copied 1:1 from apps/toolkit/app/globals.css so the
+  // localhost surface reads as the same product as the toolkit landing,
+  // not a separate utility page. Only delta is the brand mark — flower
+  // here, "dm" rack-light there.
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -249,81 +259,163 @@ function renderRootLanding(config: LocalConfig | null, health: HealthStatus): st
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ForgetMeNot — local runtime</title>
 <style>
+  :root{
+    --tk-bg-page:#09090b;--tk-bg-panel:#0f0f11;--tk-bg-elevated:#131316;
+    --tk-bg-subtle:#18181b;--tk-bg-hover:#202024;
+    --tk-border:#1c1c1f;--tk-border-strong:#27272a;--tk-border-hover:#3f3f46;
+    --tk-text-strong:#fafafa;--tk-text:#e4e4e7;--tk-text-muted:#a1a1aa;--tk-text-dim:#71717a;
+    --tk-accent:#7aa2f7;--tk-accent-rgb:122,162,247;
+    --tk-success:#22c55e;
+    --tk-radius-sm:10px;--tk-radius-md:14px;--tk-radius-lg:18px;
+    --tk-shadow-sm:0 8px 24px rgba(0,0,0,.22);--tk-shadow-md:0 18px 46px rgba(0,0,0,.3);
+  }
   *{margin:0;padding:0;box-sizing:border-box}
-  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0a0a0c;color:#e4e4e7;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
-  .card{background:#18181b;border:1px solid #27272a;border-radius:16px;padding:28px;max-width:520px;width:100%}
-  .brand{display:flex;align-items:center;gap:10px;margin-bottom:4px}
-  .brand h1{font-size:18px;font-weight:700;letter-spacing:-0.01em}
-  .pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;color:#0a0a0c;text-transform:uppercase;letter-spacing:0.05em}
-  .pill-dot{width:6px;height:6px;border-radius:50%;background:#0a0a0c;opacity:0.6}
-  .sub{font-size:12px;color:#71717a;margin-top:4px;line-height:1.5}
-  .section{margin-top:20px;padding-top:20px;border-top:1px solid #27272a}
-  .section-title{font-size:11px;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px}
-  .status-line{font-size:12px;color:#a1a1aa;margin-top:4px}
-  .status-line strong{color:#fafafa}
+  body{
+    font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+    background:var(--tk-bg-page);color:var(--tk-text);
+    min-height:100vh;display:flex;align-items:center;justify-content:center;padding:32px 24px;
+  }
+  .shell{max-width:520px;width:100%;display:flex;flex-direction:column;align-items:center}
+  .hero{
+    width:min(160px,38vw);margin-bottom:18px;padding:18px;
+    border-radius:32px;
+    background:radial-gradient(circle at 50% 32%,rgba(122,162,247,.18),transparent 38%),
+               radial-gradient(circle at 50% 60%,rgba(255,255,255,.05),transparent 62%);
+    filter:drop-shadow(0 20px 44px rgba(0,0,0,.46));
+  }
+  .hero img{width:100%;height:auto;display:block;image-rendering:auto;
+            filter:drop-shadow(0 12px 28px rgba(0,0,0,.42))}
+  .eyebrow{
+    font-size:11px;font-weight:700;letter-spacing:.26em;text-transform:uppercase;
+    color:var(--tk-text-dim);margin:0 0 14px;text-align:center;
+  }
+  h1{
+    font-size:clamp(1.6rem,4.5vw,2.2rem);font-weight:800;letter-spacing:-.04em;
+    line-height:1.1;color:var(--tk-text-strong);margin:0 0 8px;text-align:center;
+  }
+  .tagline{
+    font-size:14px;line-height:1.6;color:var(--tk-text-muted);
+    text-align:center;margin:0 0 28px;max-width:380px;
+  }
+  .card{
+    width:100%;background:linear-gradient(180deg,rgba(255,255,255,.015),rgba(255,255,255,0)),var(--tk-bg-panel);
+    border:1px solid var(--tk-border);border-radius:var(--tk-radius-lg);
+    box-shadow:var(--tk-shadow-sm);padding:24px;margin-bottom:14px;
+  }
+  .card-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+  .card-title{
+    font-size:11px;font-weight:700;color:var(--tk-text-dim);
+    text-transform:uppercase;letter-spacing:.08em;
+  }
+  .pill{
+    display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;
+    font-size:10px;font-weight:700;color:#0a0a0c;text-transform:uppercase;letter-spacing:.05em;
+  }
+  .pill-dot{width:6px;height:6px;border-radius:50%;background:#0a0a0c;opacity:.6}
+  .row{display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap}
+  .status-line{font-size:13px;color:var(--tk-text-muted);margin-top:6px;line-height:1.5}
+  .status-line strong{color:var(--tk-text-strong);font-weight:600}
   .status-line em{color:#f97316;font-style:normal}
-  input{width:100%;padding:10px 14px;font-size:13px;background:#09090b;border:1px solid #27272a;border-radius:8px;color:#fafafa;outline:none;font-family:inherit}
-  input:focus{border-color:#3f3f46}
-  .row{display:flex;gap:10px;margin-top:10px}
-  .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 18px;font-size:13px;font-weight:600;border:none;border-radius:8px;cursor:pointer;text-decoration:none;transition:background 150ms}
-  .btn-primary{background:#facc15;color:#0a0a0c}
-  .btn-primary:hover{background:#eab308}
-  .btn-primary:disabled{background:#27272a;color:#52525b;cursor:default}
-  .btn-ghost{background:transparent;color:#a1a1aa;border:1px solid #27272a}
-  .btn-ghost:hover{color:#fafafa;border-color:#3f3f46}
-  .code{font-family:'SF Mono','Fira Code',monospace;font-size:20px;font-weight:700;letter-spacing:0.12em;color:#fafafa;padding:12px 16px;background:#09090b;border:1px solid #27272a;border-radius:8px;text-align:center}
-  .note{font-size:11px;color:#52525b;margin-top:8px;line-height:1.5}
-  .ok{color:#4ade80}
-  .hint{font-size:11px;color:#71717a;margin-top:6px;line-height:1.5}
-  .toolkit-cta{display:block;margin-top:14px;padding:12px 14px;border-radius:8px;background:#09090b;border:1px solid #27272a;color:#a1a1aa;font-size:12px;line-height:1.5;text-decoration:none;transition:border-color 150ms}
-  .toolkit-cta:hover{border-color:#3f3f46;color:#fafafa}
-  .toolkit-cta strong{color:#fafafa}
-  .saved{color:#4ade80;font-size:11px;margin-left:8px}
+  input{
+    width:100%;padding:11px 14px;font-size:13px;
+    background:var(--tk-bg-subtle);border:1px solid var(--tk-border-strong);
+    border-radius:var(--tk-radius-sm);color:var(--tk-text-strong);outline:none;font-family:inherit;
+    transition:border-color .15s;
+  }
+  input:focus{border-color:var(--tk-border-hover)}
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;
+    height:40px;padding:0 18px;font-size:13px;font-weight:600;
+    border-radius:var(--tk-radius-sm);cursor:pointer;text-decoration:none;
+    transition:filter .15s,border-color .15s;font-family:inherit;
+  }
+  .btn-primary{
+    border:1px solid rgba(var(--tk-accent-rgb),.28);
+    background:linear-gradient(180deg,rgba(var(--tk-accent-rgb),.18),rgba(var(--tk-accent-rgb),.11));
+    color:var(--tk-text-strong);
+  }
+  .btn-primary:hover{filter:brightness(1.15)}
+  .btn-primary:disabled{opacity:.5;cursor:default}
+  .btn-ghost{
+    background:transparent;color:var(--tk-text-muted);border:1px solid var(--tk-border-strong);
+  }
+  .btn-ghost:hover{color:var(--tk-text-strong);border-color:var(--tk-border-hover)}
+  .code{
+    font-family:'SF Mono','JetBrains Mono','Fira Code',monospace;
+    font-size:22px;font-weight:700;letter-spacing:.14em;color:var(--tk-text-strong);
+    padding:14px 16px;background:var(--tk-bg-subtle);border:1px solid var(--tk-border-strong);
+    border-radius:var(--tk-radius-sm);text-align:center;
+  }
+  .note{font-size:11px;color:var(--tk-text-dim);margin-top:10px;line-height:1.5}
+  .hint{font-size:11px;color:var(--tk-text-dim);margin-top:8px;line-height:1.5}
+  .saved{color:var(--tk-success);font-size:11px}
+  .toolkit-cta{
+    display:flex;align-items:center;justify-content:space-between;gap:14px;
+    width:100%;padding:14px 16px;border-radius:var(--tk-radius-md);
+    background:var(--tk-bg-panel);border:1px solid var(--tk-border);
+    color:var(--tk-text);font-size:13px;line-height:1.5;text-decoration:none;
+    transition:border-color .15s;
+  }
+  .toolkit-cta:hover{border-color:var(--tk-border-hover)}
+  .toolkit-cta strong{color:var(--tk-text-strong);font-weight:600;display:block}
+  .toolkit-cta .arrow{color:var(--tk-text-dim);font-size:18px}
+  a{color:var(--tk-accent)}
+  a:hover{color:#a8c2fa}
 </style>
 </head>
 <body>
-  <div class="card">
-    <div class="brand">
-      <h1>ForgetMeNot</h1>
-      <span class="pill" style="background:${statusPill.bg}"><span class="pill-dot"></span>${statusPill.text}</span>
+  <div class="shell">
+    <div class="hero" aria-hidden="true">
+      <img alt="ForgetMeNot" src="data:image/png;base64,${FLOWER_PNG_BASE64}">
     </div>
-    <p class="sub">This runtime is running on your machine. Finish setup at <a href="${TOOLKIT_URL}" style="color:#a1a1aa;text-decoration:underline">toolkit.deutschmark.online</a>.</p>
+    <p class="eyebrow">deutschmark · forgetmenot</p>
+    <h1>Local runtime is alive.</h1>
+    <p class="tagline">Two things stay on this machine: your AI key and the pairing handshake. Everything else runs in the toolkit.</p>
 
     ${paired ? "" : `
-    <div class="section">
-      <div class="section-title">Step 1 — pair</div>
-      <div id="pairingBlock">
-        ${pairing.pairingCode
-          ? `<div class="code">${escapeHtml(pairing.pairingCode)}</div>
-             <p class="note">Approve this code in the browser window that just opened. This page will update once pairing completes.</p>`
-          : `<p class="hint">Click below to get a pairing code. Your broadcaster browser session will be asked to approve it.</p>
-             <div class="row"><button class="btn btn-primary" onclick="startPair()">Start pairing</button></div>`
-        }
+    <div class="card">
+      <div class="card-head">
+        <span class="card-title">Step 1 · pair runtime</span>
       </div>
+      ${pairing.pairingCode
+        ? `<div class="code">${escapeHtml(pairing.pairingCode)}</div>
+           <p class="note">Approve this code in the browser window that just opened. This page updates once pairing completes.</p>`
+        : `<p class="hint">Generate a pairing code. Your broadcaster session will be asked to approve it.</p>
+           <div class="row"><button class="btn btn-primary" onclick="startPair()">Start pairing</button></div>`
+      }
     </div>`}
 
-    <div class="section">
-      <div class="section-title">${paired ? "Status" : "Once paired"}</div>
-      <div class="status-line">Runtime: <strong>${statusPill.text}</strong>${health.uptime ? ` (up ${formatUptime(health.uptime)})` : ""}</div>
+    <div class="card">
+      <div class="card-head">
+        <span class="card-title">${paired ? "Status" : "Once paired"}</span>
+        <span class="pill" style="background:${statusPill.bg}"><span class="pill-dot"></span>${statusPill.text}</span>
+      </div>
+      <div class="status-line">Runtime: <strong>${statusPill.text}</strong>${health.uptime ? ` <span style="color:var(--tk-text-dim)">· up ${formatUptime(health.uptime)}</span>` : ""}</div>
       <div class="status-line">${botLine}</div>
-      ${paired ? `<div class="status-line">Install: <strong>${escapeHtml(config?.installationId?.slice(0, 8) || "?")}...</strong></div>` : ""}
+      ${paired ? `<div class="status-line">Install: <strong>${escapeHtml(config?.installationId?.slice(0, 8) || "?")}…</strong></div>` : ""}
     </div>
 
-    <div class="section">
-      <div class="section-title">AI API key <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#52525b">— stays on this machine</span></div>
+    <div class="card">
+      <div class="card-head">
+        <span class="card-title">AI API key</span>
+        <span style="font-size:11px;color:var(--tk-text-dim)">stays on this machine</span>
+      </div>
       <form id="aiKeyForm" onsubmit="return saveKey(event)">
-        <input type="password" id="aiKey" placeholder="${hasKey ? "••••••••••• (already set — paste to replace)" : "sk-... or AI... (Gemini or OpenAI)"}" autocomplete="off">
+        <input type="password" id="aiKey" placeholder="${hasKey ? "••••••••••• already set — paste to replace" : "sk-… or AI… (Gemini or OpenAI)"}" autocomplete="off">
         <div class="row">
           <button type="submit" class="btn btn-primary">${hasKey ? "Update key" : "Save key"}</button>
-          <span id="keySaved" class="saved" style="display:none;align-self:center">✓ saved — the bot will pick it up shortly</span>
+          <span id="keySaved" class="saved" style="display:none">✓ saved — runtime will pick it up shortly</span>
         </div>
-        <p class="hint">Your Gemini or OpenAI API key never leaves this machine. That&apos;s deliberate — the key is yours, and the local-first posture is the point.</p>
+        <p class="hint">Your Gemini or OpenAI key never leaves this machine. That&apos;s deliberate — local-first is the point.</p>
       </form>
     </div>
 
     <a href="${TOOLKIT_URL}" class="toolkit-cta">
-      <strong>Open toolkit to finish setup →</strong><br>
-      Connect your bot account, pick rollout defaults, and tune personality.
+      <div>
+        <strong>Open toolkit</strong>
+        <span style="color:var(--tk-text-muted);font-size:12px">Connect bot account, rollout defaults, personality.</span>
+      </div>
+      <span class="arrow">→</span>
     </a>
   </div>
 
