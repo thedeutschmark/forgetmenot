@@ -103,6 +103,15 @@ function compare(baseline, current) {
     });
   }
 
+  // New fixtures present in current but not baseline — hard fail so a
+  // freshly added fixture can't silently bypass the gate. Author accepts
+  // it via `npm run eval:baseline` once the scores look right.
+  for (const id of Object.keys(current.fixtures)) {
+    if (!(id in baseline.fixtures)) {
+      regressions.push({ kind: "fixture_unbaselined", id, hard: true });
+    }
+  }
+
   for (const [id, b] of Object.entries(baseline.fixtures)) {
     const c = current.fixtures[id];
     if (!c) {
@@ -161,6 +170,7 @@ function printDiff({ regressions, improvements }, baseline, current) {
       const marker = r.hard ? "✗" : "·";
       if (r.kind === "overall") console.log(`  ${marker} overall score ${dpct(r.delta)} (threshold -${(r.threshold * 100).toFixed(0)}pp)`);
       else if (r.kind === "fixture_missing") console.log(`  ${marker} fixture ${r.id} missing from current run`);
+      else if (r.kind === "fixture_unbaselined") console.log(`  ${marker} new fixture ${r.id} not in baseline — accept with \`npm run eval:baseline\``);
       else if (r.kind === "null_score") console.log(`  ${marker} ${r.id} ${r.field} became null`);
       else console.log(`  ${marker} ${r.id} ${r.field} ${dpct(r.delta)} (threshold -${(r.threshold * 100).toFixed(0)}pp)`);
     }

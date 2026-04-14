@@ -37,7 +37,10 @@ compares against the new accepted state.
 - Persona changes that make the bot skip replies it used to make.
 - Policy tweaks that cause the action pipeline to deny things it used to allow (or vice versa).
 - Retrieval regressions — notes the bot used to surface that it no longer does.
-- Fixture-level coverage gaps (a fixture being unintentionally removed).
+- Fixtures removed from the suite (present in baseline, missing from current run).
+- Fixtures added but not yet accepted — a new fixture is a hard fail until
+  its scores are blessed via `npm run eval:baseline`. That keeps anyone
+  from adding a fixture whose poor scores silently slip past the gate.
 
 ## What it doesn't catch
 
