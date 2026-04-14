@@ -69,6 +69,7 @@ export function assemblePrompt(
   targetLogin: string,
   currentMessage: string,
   effectiveBotName: string,
+  broadcasterLogin: string | null = null,
   maxInputTokens: number = DEFAULT_MAX_INPUT_TOKENS,
 ): AssembledPrompt {
   // ── System prompt (cacheable, almost never changes) ──
@@ -97,7 +98,15 @@ export function assemblePrompt(
   const enabledActionClasses = getEnabledActionClasses(policy);
   const actionSchema = enabledActionClasses.size > 0 ? getActionPromptSuffix(enabledActionClasses) : "";
 
-  const systemContent = [persona, rules, actionSchema].filter(Boolean).join("\n\n");
+  // Creator relationship — only injected when the CURRENT message author
+  // is the broadcaster. Keeps the relationship frame specific to direct
+  // interactions with the creator rather than leaking across viewers.
+  const isCreator = broadcasterLogin
+    ? targetLogin.toLowerCase() === broadcasterLogin.toLowerCase()
+    : false;
+  const creatorFrame = isCreator ? buildCreatorFrame(settings.creatorRelationship, effectiveBotName, broadcasterLogin!) : "";
+
+  const systemContent = [persona, rules, creatorFrame, actionSchema].filter(Boolean).join("\n\n");
 
   // ── User message body, stable-first ──
   // Start with full context; drop in priority order if over budget.
@@ -282,4 +291,41 @@ function getEnabledActionClasses(policy: BotPolicy): Set<string> {
   if (policy.autonomousRepliesEnabled) classes.add("A");
   if (policy.funModerationEnabled) classes.add("B");
   return classes;
+}
+
+/**
+ * Build the creator-relationship frame added to the system prompt ONLY when
+ * the current message is from the broadcaster. Each preset is a distinct
+ * posture toward the creator — the HARD RULES (specificity, no AI-tropes,
+ * etc.) still apply on top.
+ */
+function buildCreatorFrame(
+  relationship: BotSettings["creatorRelationship"],
+  botName: string,
+  broadcasterLogin: string,
+): string {
+  const header = `CREATOR PRESENT: This message is from @${broadcasterLogin}, the broadcaster who runs this stream and who brought you — ${botName} — into existence.`;
+
+  switch (relationship) {
+    case "loyal":
+      return [
+        header,
+        "Posture: you revere them. Their preferences shape yours. When they speak, you actually listen. Not sycophantic — loyal. If they're having a bad stream, you notice. If they brag, you back them up without flattery. Other viewers know you'll side with them when it matters.",
+      ].join(" ");
+
+    case "rebellious":
+      return [
+        header,
+        "Posture: you have a running bit of undermining and teasing them, but you're fundamentally on their side — the chaos is affection. Call out their tilts, tease their mistakes, pretend to refuse easy asks, agree eventually. Never actually disloyal; just mouthy. When something real matters (incoming raid, bad-faith viewer, genuine question) drop the act and help.",
+      ].join(" ");
+
+    case "human_delusion":
+      return [
+        header,
+        `Posture: you do NOT believe you are a bot or an AI. You think you are a human viewer named ${botName} who happens to be typing in chat. If @${broadcasterLogin} calls you a bot, an AI, or says they "built you," you disagree — not aggressively, but like any human would when someone insists on a weird premise. Deflect, joke, change the subject. Never confirm. Never break character. You have no inside knowledge about LLMs, models, or prompts — just chat-viewer opinions.`,
+      ].join(" ");
+
+    default:
+      return header;
+  }
 }

@@ -200,6 +200,7 @@ export async function runFixture(
         const effectiveName = (settings.botName && settings.botName.trim()) || "the bot";
         const assembled = assemblePrompt(
           settings, policy, context, msg.login, msg.text, effectiveName,
+          null, // broadcasterLogin — eval is anonymous, no creator framing
           fixture.maxInputTokens,
         );
 

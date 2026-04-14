@@ -28,6 +28,10 @@ export interface BotSettings {
   compactionFrequency: "every_stream" | "daily" | "weekly";
   aiProvider: "gemini" | "openai";
   aiModel: string;
+  /** How the bot sees the broadcaster — injected into prompt only when the
+   *  current message author is the broadcaster login. See workers/auth
+   *  BotSettings for authoritative docs. */
+  creatorRelationship: "loyal" | "rebellious" | "human_delusion";
 }
 
 export interface BotPolicy {

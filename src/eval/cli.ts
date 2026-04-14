@@ -33,7 +33,8 @@ const EVAL_SETTINGS: BotSettings = {
   memoryRetentionDays: 90,
   compactionFrequency: "every_stream",
   aiProvider: "gemini",
-  aiModel: "gemini-2.5-flash",
+  aiModel: "gemini-2.5-flash-lite",
+  creatorRelationship: "loyal",
 };
 
 const EVAL_POLICY: BotPolicy = {

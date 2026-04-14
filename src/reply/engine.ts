@@ -284,7 +284,10 @@ function buildPrompt(
     optInRequired: true, allowlist: [], denylist: [], sensitiveTopics: [], safeMode: true,
   };
 
-  const assembled = assemblePrompt(settings, policy, context, targetLogin, currentMessage, effectiveName);
+  const assembled = assemblePrompt(
+    settings, policy, context, targetLogin, currentMessage, effectiveName,
+    currentBundle?.broadcasterLogin ?? null,
+  );
 
   return {
     messages: [
