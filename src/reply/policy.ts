@@ -92,12 +92,6 @@ export function validateReplyText(
   // Strip newlines (Twitch doesn't support multi-line)
   cleaned = cleaned.replace(/[\r\n]+/g, " ");
 
-  // Strip banned opener patterns that the prompt rules forbid. Belt-and-
-  // suspenders — the rules tell the LLM not to use these, but chat must
-  // never see them regardless. Removing them at the start without removing
-  // internal uses (where they might be sarcastically quoted).
-  cleaned = cleaned.replace(/^(?:oh,?\s+|well,?\s+actually[,\s]+|ah,?\s+yes[,\s]+)/i, "");
-
   // Belt-and-suspenders: strip any naked action leak that slipped past
   // parseReplyWithAction. Parser only catches `[ACTION: name ...]`, this
   // also catches `reply_extra(message="...")` / `warning_playful k=v` emitted
