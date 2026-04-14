@@ -138,7 +138,14 @@ export async function executeFunnyTimeout(ctx: TimeoutContext): Promise<TimeoutR
   // ── Live execution via Helix ──
 
   try {
-    const res = await fetch("https://api.twitch.tv/helix/moderation/bans", {
+    // Helix /moderation/bans requires broadcaster_id + moderator_id as
+    // QUERY PARAMS, not in the body. Without them Twitch returns 400 every
+    // time. Bot account token must have moderator:manage:banned_users scope
+    // and the bot must actually be a mod in the broadcaster's channel.
+    const url = new URL("https://api.twitch.tv/helix/moderation/bans");
+    url.searchParams.set("broadcaster_id", broadcasterTwitchId);
+    url.searchParams.set("moderator_id", botAccount.twitchId);
+    const res = await fetch(url.toString(), {
       method: "POST",
       headers: {
         Authorization: `Bearer ${botAccount.accessToken}`,
