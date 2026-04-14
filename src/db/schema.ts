@@ -9,7 +9,7 @@
  * Plus: viewers, action_logs, bot_messages, channel_state
  */
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 export const MIGRATIONS: string[] = [
   /* v1 — initial schema */
@@ -153,5 +153,33 @@ export const MIGRATIONS: string[] = [
     last_event_id INTEGER,
     status TEXT NOT NULL DEFAULT 'idle'
   );
+  `,
+
+  /* v3 — source-attributed notes (Step 3 of stabilization week, 2026-04-14)
+   *
+   * Adds three columns to semantic_notes so every stored fact answers
+   * "where did this come from?". Columns are nullable because every
+   * pre-existing row has unknown provenance — treating "legacy" as a
+   * distinct state keeps the bot from silently reclassifying old data.
+   *
+   *   source_kind        — 'self_claim' (speaker said it about themselves)
+   *                        | 'reported'   (someone else said it about the subject)
+   *                        | 'inferred'   (derived from behavior, not directly stated)
+   *                        | NULL         (legacy row, provenance unknown)
+   *   source_snippet     — ≤200 chars of the originating text (kept for
+   *                        operator review + future selective prompt use;
+   *                        NOT rendered in the default lore prompt)
+   *   source_episode_id  — proper FK to episodes.id (the existing
+   *                        supporting_evidence column held this as a
+   *                        stringified number; keep it as fallback)
+   *
+   * ALTER TABLE ADD COLUMN is idempotent across reruns only via the
+   * schema-version gate — this migration runs exactly once per install.
+   */
+  `
+  ALTER TABLE semantic_notes ADD COLUMN source_kind TEXT;
+  ALTER TABLE semantic_notes ADD COLUMN source_snippet TEXT;
+  ALTER TABLE semantic_notes ADD COLUMN source_episode_id INTEGER REFERENCES episodes(id);
+  CREATE INDEX IF NOT EXISTS idx_notes_source_episode ON semantic_notes(source_episode_id);
   `,
 ];
