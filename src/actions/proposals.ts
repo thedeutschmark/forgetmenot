@@ -12,8 +12,15 @@
 
 import type { ActionProposal, ActionType, ACTION_CLASS } from "./types.js";
 
-const ACTION_REGEX = /\[ACTION:\s*(\w+)(?:\s+(.+?))?\]/i;
-const PARAM_REGEX = /(\w+)=("(?:[^"\\]|\\.)*"|[^\s]+)/g;
+// Match ANY bracket that starts with `[ACTION:` and grab the rest of the
+// bracket content lazily. We strip this bracket from visible reply text no
+// matter what shape the LLM produced inside — function-call style
+// (`warning_playful(message="...")`), space-separated (`target=x duration=5`),
+// or mixed. Leaking a raw `[ACTION: ...]` tag into chat is worse than
+// dropping an action proposal we couldn't parse.
+const ACTION_REGEX = /\[ACTION:\s*([\s\S]*?)\]/i;
+const ACTION_NAME_REGEX = /^\s*(\w+)/;
+const PARAM_REGEX = /(\w+)\s*=\s*("(?:[^"\\]|\\.)*"|[^,\s)]+)/g;
 
 const VALID_ACTIONS = new Set<ActionType>([
   "reply_extra", "clip_mark", "joke_flag", "scene_cue", "warning_playful",
@@ -36,16 +43,26 @@ export function parseReplyWithAction(rawText: string): ParsedReply {
     return { text: rawText.trim(), proposal: null };
   }
 
-  // Strip the ACTION block from the reply text
-  const text = rawText.replace(ACTION_REGEX, "").trim();
+  // Strip ALL ACTION blocks from the reply text, regardless of whether we
+  // can parse them below. The visible chat reply must never contain a raw
+  // bracket tag — that's the actual user-facing failure.
+  const text = rawText.replace(/\[ACTION:\s*[\s\S]*?\]/gi, "").trim();
 
-  const actionStr = match[1].toLowerCase() as ActionType;
+  // Inner content may be function-call style (name(k=v, k="v")) or
+  // space-separated (name k=v k=v). Pull the action name first, then hand
+  // the rest to the generic key=value extractor.
+  const inner = match[1];
+  const nameMatch = ACTION_NAME_REGEX.exec(inner);
+  if (!nameMatch) {
+    return { text, proposal: null };
+  }
+  const actionStr = nameMatch[1].toLowerCase() as ActionType;
   if (!VALID_ACTIONS.has(actionStr)) {
     return { text, proposal: null };
   }
 
-  // Parse parameters
-  const paramsStr = match[2] || "";
+  // Parse parameters from the remaining content
+  const paramsStr = inner.slice(nameMatch[0].length);
   const params: Record<string, string> = {};
   let paramMatch: RegExpExecArray | null;
   while ((paramMatch = PARAM_REGEX.exec(paramsStr)) !== null) {
