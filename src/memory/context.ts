@@ -36,6 +36,11 @@ export interface ReplyContext {
   recentNotes: string[];
   /** Parallel array — channel note row IDs in the same order as `recentNotes`. */
   recentNoteIds: number[];
+  /** The bot's last few replies, oldest first. Surfaced in the prompt as
+   *  an explicit "you just said these — DO NOT repeat openers, structure,
+   *  or specific phrasing" instruction. Without this, gemini happily reuses
+   *  "Oh, X" / "How precious" / "sweetie" forever. */
+  recentBotReplies: string[];
 }
 
 /**
@@ -136,6 +141,21 @@ export function buildReplyContext(
     `)
     .all() as Array<{ id: number; fact: string }>;
 
+  // Bot's own recent replies — fed back into the prompt so the LLM sees
+  // its own pattern and breaks out of trope loops. Without this, gemini
+  // reuses "Oh, X" / "How precious" / "sweetie" indefinitely.
+  const recentBotReplies = (() => {
+    try {
+      return (db
+        .prepare(`SELECT reply_text FROM bot_messages ORDER BY id DESC LIMIT 5`)
+        .all() as Array<{ reply_text: string }>)
+        .map((r) => r.reply_text)
+        .reverse();
+    } catch {
+      return [];
+    }
+  })();
+
   return {
     recentMessages: recentMessages.map((m) => ({
       login: m.login || "unknown",
@@ -148,5 +168,6 @@ export function buildReplyContext(
     recentEpisodes: episodes.map((e) => e.summary),
     recentNotes: channelNotes.map((n) => n.fact),
     recentNoteIds: channelNotes.map((n) => Number(n.id)),
+    recentBotReplies,
   };
 }
