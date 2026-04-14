@@ -53,11 +53,19 @@ export interface ReplyContext {
 
 /**
  * Build context for a reply to a specific user's message.
+ *
+ * `staleDays`: notes whose last_confirmed_at is older than this are excluded
+ * from the retrieval window. Notes that fall out of the window aren't
+ * deleted — they're just not surfaced to the LLM. A later re-extraction
+ * that matches the same fact will bump last_confirmed_at and revive it.
+ * Default 90 days; override from settings.memoryRetentionDays at the
+ * caller site.
  */
 export function buildReplyContext(
   targetLogin: string,
   targetTwitchId: string,
   maxMessages: number = 20,
+  staleDays: number = 90,
 ): ReplyContext {
   const db = getDb();
 
@@ -86,14 +94,20 @@ export function buildReplyContext(
     // Load semantic notes for this viewer.
     // subject_id is the lowercase login (matches how memory/notes.ts writes them
     // — see notes.ts line 127). Using twitch_user_id here returns nothing.
+    // Stale filter: note must have been confirmed within the retention
+    // window. Sliding window — a stale note that gets re-confirmed via
+    // the dedup path re-enters the retrieval set automatically because
+    // its last_confirmed_at jumps to now.
+    const staleCutoff = `-${Math.max(1, Math.round(staleDays))} days`;
     const notes = db
       .prepare(`
         SELECT id, fact, source_kind FROM semantic_notes
         WHERE scope = 'viewer' AND subject_id = ? AND status = 'active'
+          AND last_confirmed_at > datetime('now', ?)
         ORDER BY last_confirmed_at DESC
         LIMIT 10
       `)
-      .all(String(viewer.login || "").toLowerCase()) as Array<{ id: number; fact: string; source_kind: string | null }>;
+      .all(String(viewer.login || "").toLowerCase(), staleCutoff) as Array<{ id: number; fact: string; source_kind: string | null }>;
 
     // Target viewer's own recent chat messages. On Twitch, users frequently
     // split a single thought across multiple messages ("wait", "actually",
@@ -140,15 +154,17 @@ export function buildReplyContext(
     `)
     .all() as Array<{ summary: string }>;
 
-  // Channel-level semantic notes
+  // Channel-level semantic notes — same stale filter as viewer notes.
+  const channelStaleCutoff = `-${Math.max(1, Math.round(staleDays))} days`;
   const channelNotes = db
     .prepare(`
       SELECT id, fact, source_kind FROM semantic_notes
       WHERE scope = 'channel' AND status = 'active'
+        AND last_confirmed_at > datetime('now', ?)
       ORDER BY last_confirmed_at DESC
       LIMIT 5
     `)
-    .all() as Array<{ id: number; fact: string; source_kind: string | null }>;
+    .all(channelStaleCutoff) as Array<{ id: number; fact: string; source_kind: string | null }>;
 
   // Bot's own recent replies — fed back into the prompt so the LLM sees
   // its own pattern and breaks out of trope loops. Without this, gemini
