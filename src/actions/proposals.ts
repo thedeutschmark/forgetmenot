@@ -28,9 +28,30 @@ const VALID_ACTIONS = new Set<ActionType>([
   "ban", "timeout_serious", "mod_action",
 ]);
 
+// Defense-in-depth: naked action leaks WITHOUT the [ACTION: ] wrapper.
+// Seen in live output: LLM emits `reply_extra message="..."` on its own at
+// the tail of a reply. The primary ACTION_REGEX doesn't match that, so the
+// leak lands in chat. This pattern catches any known action name followed
+// by `(`, `key=value`, or trailing params — anywhere in the text — and is
+// used to scrub the visible reply as a second pass.
+const NAKED_ACTION_REGEX = new RegExp(
+  `(?:^|\\s|[.!?,;])\\s*(?:${Array.from(VALID_ACTIONS).join("|")})\\b\\s*(?:\\([^)]*\\)|(?:\\w+\\s*=\\s*(?:"[^"]*"|\\S+)\\s*)+)`,
+  "gi",
+);
+
 export interface ParsedReply {
   text: string;           // clean reply text (ACTION block stripped)
   proposal: ActionProposal | null;
+}
+
+/**
+ * Strip naked action leaks from visible reply text. Catches the case where
+ * the LLM emits `reply_extra(message="...")` or `warning_playful target=x`
+ * with no [ACTION: ...] wrapper at all — common when the model treats the
+ * action grammar as inline tool-call syntax. Safe to call unconditionally.
+ */
+export function stripNakedActionLeaks(text: string): string {
+  return text.replace(NAKED_ACTION_REGEX, " ").replace(/\s{2,}/g, " ").trim();
 }
 
 /**

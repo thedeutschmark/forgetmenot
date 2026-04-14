@@ -7,6 +7,7 @@
 
 import type { BotPolicy, BotSettings } from "../runtime/config.js";
 import { isCoolingDown, setCooldown } from "../runtime/cooldowns.js";
+import { stripNakedActionLeaks } from "../actions/proposals.js";
 
 export interface PolicyCheckResult {
   allowed: boolean;
@@ -90,6 +91,13 @@ export function validateReplyText(
 
   // Strip newlines (Twitch doesn't support multi-line)
   cleaned = cleaned.replace(/[\r\n]+/g, " ");
+
+  // Belt-and-suspenders: strip any naked action leak that slipped past
+  // parseReplyWithAction. Parser only catches `[ACTION: name ...]`, this
+  // also catches `reply_extra(message="...")` / `warning_playful k=v` emitted
+  // on their own by an LLM that dropped the bracket wrapper. Chat should
+  // NEVER see these, regardless of prompt obedience.
+  cleaned = stripNakedActionLeaks(cleaned);
 
   // Markdown cleanup for Twitch chat:
   //  - `**bold**` / `__bold__` — just drop the markers (Twitch has no bold)
