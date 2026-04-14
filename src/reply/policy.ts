@@ -92,14 +92,17 @@ export function validateReplyText(
   // "Define "alive." My" that read as broken.
   cleaned = trimToCompleteSentence(cleaned);
 
-  // Truncation guard: if the provider told us finish_reason="length" AND the
-  // result still has no terminal punctuation, the reply is a cut-off fragment
-  // with no safe split point. Reject rather than send something broken like
-  // "Oh, *now* you just said this in response to me" (real example from a
-  // live run). Engine logs this as truncated_reply so the blocked-attempt
-  // stream shows it distinctly from plain empty replies.
+  // Truncation fallback: if the provider told us finish_reason="length" AND
+  // trimToCompleteSentence couldn't find a safe boundary, we still send the
+  // fragment with an ellipsis so chat gets *a* response. Explicit user
+  // direction (2026-04-14): "the solution should never be to not respond."
+  // A slightly rough reply beats silent denial — we'd rather chat see a
+  // truncated thought than nothing at all.
   if (finishReason === "length" && !/[.!?…][\s"')\]}]*$/.test(cleaned)) {
-    return null;
+    // Trim trailing partial word so the ellipsis doesn't land mid-syllable.
+    cleaned = cleaned.replace(/\s+\S*$/, "").trim();
+    if (cleaned.length === 0) return null;
+    cleaned = cleaned + "…";
   }
 
   return cleaned || null;
