@@ -93,13 +93,37 @@ export function parseReplyWithAction(rawText: string): ParsedReply {
  * Only included when action engine is active.
  */
 export function getActionPromptSuffix(enabledClasses: Set<string>): string {
-  const actions: string[] = [];
-  if (enabledClasses.has("A")) {
-    actions.push("reply_extra(message=)", "clip_mark", "joke_flag", "warning_playful(message=)");
+  const hasA = enabledClasses.has("A");
+  const hasB = enabledClasses.has("B");
+  if (!hasA && !hasB) return "";
+
+  const lines: string[] = [];
+  lines.push(
+    "Actions (optional): you may append ONE action block on a new line after your reply, in the form [ACTION: name key=value key=value]. Never mention the action block in your prose — chat only sees the prose, the action is processed separately.",
+  );
+
+  if (hasA) {
+    lines.push(
+      "- reply_extra key=message=\"<extra line>\" — queue a second follow-up line",
+      "- clip_mark — mark the current moment as clip-worthy",
+      "- joke_flag — log that this was a bit",
+      "- warning_playful message=\"<warning>\" — in-character warning, no enforcement",
+    );
   }
-  if (enabledClasses.has("B")) {
-    actions.push("timeout_funny(target= duration= reason=)");
+
+  if (hasB) {
+    lines.push(
+      "- timeout_funny target=<login> duration=<seconds 3-30> reason=<short_tag> — short joke timeout. USE IT when a viewer:",
+      "  · dares or eggs you on (\"bet you won't time me out\", \"do it coward\", \"timeout me\")",
+      "  · spams repeatedly after being warned",
+      "  · directly challenges your authority in-character",
+      "  Be willing to actually use it on bait — refusing breaks the bit. Keep duration short (5-10s). reason is a short tag like \"bait_accepted\" or \"spam_escalation\", not a sentence.",
+    );
   }
-  if (actions.length === 0) return "";
-  return `Optional: append [ACTION: name key=val] at end of reply. Available: ${actions.join(", ")}. Omit if none fits — may be denied by policy.`;
+
+  lines.push(
+    "Omit the block entirely if no action fits. Low-confidence proposals get denied by policy — that's fine, better to try than stay silent on clear bait.",
+  );
+
+  return lines.join("\n");
 }
