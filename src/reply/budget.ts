@@ -139,6 +139,19 @@ export function assemblePrompt(
     }
 
     // Volatile tier (never cacheable)
+    // Speaker status — mod/vip/regular badges shape how the bot should
+    // respond. Mods get more deference, VIPs get warmth, regulars get
+    // familiarity. Unknown viewers get neutral. This is one short line so
+    // the LLM can pick up the cue without burning tokens.
+    const v = context.targetViewer;
+    if (v) {
+      const badges: string[] = [];
+      if (v.isMod) badges.push("MOD");
+      if (v.isVip) badges.push("VIP");
+      if (v.isRegular) badges.push("regular");
+      const badgeStr = badges.length > 0 ? badges.join(", ") : "newer viewer";
+      parts.push(`SPEAKER: @${targetLogin} — ${badgeStr}. Adjust posture: mods get respect (they share moderation duty with you), VIPs get warmth, regulars get familiarity, newer viewers get curiosity not condescension.`);
+    }
     if (viewerLore.length > 0) {
       parts.push(`LORE (${targetLogin}):\n` + viewerLore.map((n) => `• ${n}`).join("\n"));
     }
