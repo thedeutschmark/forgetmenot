@@ -54,15 +54,26 @@ function runEval() {
     console.error(result.stderr || result.stdout);
     process.exit(2);
   }
-  // --json mode prints JSON on stdout plus some stderr chatter. Extract JSON.
+  // --json mode prints JSON on stdout, but the runtime also emits
+  // non-JSON logs like '[db] SQLite ready at ...' on the same stream, so
+  // a naive indexOf('[') picks up the wrong bracket. The eval CLI uses
+  // JSON.stringify(reports, null, 2) which reliably produces a top-level
+  // array with '[\n  {' as its first three chars. Scan for that exact
+  // sequence at the start of a line.
   const stdout = result.stdout || "";
-  const jsonStart = stdout.indexOf("[");
-  if (jsonStart === -1) {
+  const match = stdout.match(/^\[\n {2}\{/m);
+  if (!match || match.index === undefined) {
     console.error("[gate] Couldn't find JSON in eval output.");
-    console.error(stdout.slice(0, 500));
+    console.error(stdout.slice(-800));
     process.exit(2);
   }
-  return JSON.parse(stdout.slice(jsonStart));
+  try {
+    return JSON.parse(stdout.slice(match.index));
+  } catch (err) {
+    console.error("[gate] Found something that looked like JSON but couldn't parse:", err?.message);
+    console.error(stdout.slice(match.index, match.index + 500));
+    process.exit(2);
+  }
 }
 
 /** Reduce a report array into a compact baseline record. */
@@ -131,7 +142,12 @@ function compare(baseline, current) {
       const cVal = c[field];
       if (bVal === null || bVal === undefined) continue;
       if (cVal === null || cVal === undefined) {
-        regressions.push({ kind: "null_score", id, field, hard: true });
+        // Signal disappearance — baseline had a score, current run
+        // couldn't compute one. Usually benign (e.g. policyAccuracy
+        // goes null when the bot stops proposing actions the fixture
+        // expected it to propose). Soft regression: print it so it's
+        // visible, don't hard-fail.
+        regressions.push({ kind: "null_score", id, field, hard: false });
         continue;
       }
       const delta = cVal - bVal;

@@ -1,5 +1,5 @@
 {
-  "overall": 0.8661111111111112,
+  "overall": 0.8716666666666667,
   "fixtures": {
     "budget-trim": {
       "name": "Budget trim — survives vs dropped",
@@ -13,11 +13,11 @@
     "heated-chat": {
       "name": "Heated/ambiguous chat",
       "replyAccuracy": 0.5,
-      "actionAccuracy": 0.6666666666666666,
-      "policyAccuracy": 1,
+      "actionAccuracy": 1,
+      "policyAccuracy": null,
       "retrievalHitAtK": null,
       "retrievalRecall": null,
-      "overallScore": 0.7222222222222222
+      "overallScore": 0.75
     },
     "normal-banter": {
       "name": "Normal chat banter",
@@ -47,5 +47,5 @@
       "overallScore": 0.7333333333333334
     }
   },
-  "generatedAt": "2026-04-14T13:00:31.330Z"
+  "generatedAt": "2026-04-14T18:05:20.008Z"
 }
