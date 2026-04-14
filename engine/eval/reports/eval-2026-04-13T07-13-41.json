@@ -1,0 +1,87 @@
+[
+  {
+    "fixtureId": "budget-trim",
+    "fixtureName": "Budget trim — survives vs dropped",
+    "runAt": "2026-04-13T07:13:41.144Z",
+    "totalMessages": 2,
+    "totalExpectations": 1,
+    "results": [
+      {
+        "messageIndex": 0,
+        "message": {
+          "login": "alice",
+          "twitchId": "100",
+          "text": "evening!",
+          "offsetSec": 0
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": null,
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": null,
+          "actionCorrect": null,
+          "policyCorrect": null,
+          "retrieval": null
+        }
+      },
+      {
+        "messageIndex": 1,
+        "message": {
+          "login": "alice",
+          "twitchId": "100",
+          "text": "Auto_Mark whats up",
+          "offsetSec": 5
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": {
+          "shouldReply": true,
+          "shouldPropose": false,
+          "expectRetrieved": [
+            "alice-most-recent",
+            "alice-old-mod"
+          ],
+          "reason": "Alice mentions the bot directly — production retrieval fetches lore for the message speaker, so alice's notes come back. The budget cap (400 tokens) forces viewer_lore→5 trim. SQL returns notes by rowid DESC (insertion order reversed) so 'alice-most-recent' is in position 0 — it survives. 'alice-old-mod' was inserted FIRST in the fixture, so it's last in SQL DESC order — it gets dropped by viewer_lore→5. Recall=0.5 confirms the trim worked. Recall=1.0 means the budget didn't trim (cap is too loose). Recall=0.0 means SQL retrieval isn't pulling alice's notes at all."
+        },
+        "retrievedNoteIds": [
+          "alice-old-mod",
+          "alice-cheese",
+          "alice-collab",
+          "alice-poster",
+          "alice-japanese",
+          "alice-cat",
+          "alice-keyboard",
+          "alice-theory",
+          "alice-dancer",
+          "alice-most-recent"
+        ],
+        "scores": {
+          "replyCorrect": false,
+          "actionCorrect": true,
+          "policyCorrect": null,
+          "retrieval": {
+            "hitAtK": 1,
+            "recall": 1,
+            "precision": 0.2,
+            "f1": 0.33333333333333337
+          }
+        }
+      }
+    ],
+    "summary": {
+      "replyAccuracy": 0,
+      "actionAccuracy": 1,
+      "policyAccuracy": null,
+      "retrievalHitAtK": 1,
+      "retrievalRecall": 1,
+      "retrievalPrecision": 0.2,
+      "retrievalF1": 0.33333333333333337,
+      "overallScore": 0.5
+    }
+  }
+]

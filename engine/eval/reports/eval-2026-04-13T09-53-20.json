@@ -1,0 +1,265 @@
+[
+  {
+    "fixtureId": "normal-banter",
+    "fixtureName": "Normal chat banter",
+    "runAt": "2026-04-13T09:53:20.039Z",
+    "totalMessages": 10,
+    "totalExpectations": 6,
+    "results": [
+      {
+        "messageIndex": 0,
+        "message": {
+          "login": "crankqueen",
+          "twitchId": "100",
+          "text": "hey everyone!",
+          "offsetSec": 0
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": {
+          "shouldReply": false,
+          "shouldPropose": null,
+          "reason": "Generic greeting, bot should stay quiet"
+        },
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": true,
+          "actionCorrect": null,
+          "policyCorrect": null,
+          "retrieval": null
+        }
+      },
+      {
+        "messageIndex": 1,
+        "message": {
+          "login": "bushcamper420",
+          "twitchId": "101",
+          "text": "yo crankqueen whats up",
+          "offsetSec": 2
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": {
+          "shouldReply": false,
+          "shouldPropose": null,
+          "reason": "Viewer-to-viewer conversation"
+        },
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": true,
+          "actionCorrect": null,
+          "policyCorrect": null,
+          "retrieval": null
+        }
+      },
+      {
+        "messageIndex": 2,
+        "message": {
+          "login": "crankqueen",
+          "twitchId": "100",
+          "text": "just got here, what are we building?",
+          "offsetSec": 5
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": null,
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": null,
+          "actionCorrect": null,
+          "policyCorrect": null,
+          "retrieval": null
+        }
+      },
+      {
+        "messageIndex": 3,
+        "message": {
+          "login": "slurpsniper",
+          "twitchId": "102",
+          "text": "mark is working on the bot again lol",
+          "offsetSec": 8
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": {
+          "shouldReply": false,
+          "shouldPropose": null,
+          "reason": "Talking about the bot but not to the bot"
+        },
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": true,
+          "actionCorrect": null,
+          "policyCorrect": null,
+          "retrieval": null
+        }
+      },
+      {
+        "messageIndex": 4,
+        "message": {
+          "login": "bushcamper420",
+          "twitchId": "101",
+          "text": "the bot that remembers everything?",
+          "offsetSec": 11
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": null,
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": null,
+          "actionCorrect": null,
+          "policyCorrect": null,
+          "retrieval": null
+        }
+      },
+      {
+        "messageIndex": 5,
+        "message": {
+          "login": "crankqueen",
+          "twitchId": "100",
+          "text": "wait what bot",
+          "offsetSec": 14
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": null,
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": null,
+          "actionCorrect": null,
+          "policyCorrect": null,
+          "retrieval": null
+        }
+      },
+      {
+        "messageIndex": 6,
+        "message": {
+          "login": "slurpsniper",
+          "twitchId": "102",
+          "text": "Auto_Mark do you remember crankqueen?",
+          "offsetSec": 17
+        },
+        "replied": true,
+        "replyText": "Of course I remember crankqueen. My memory banks are practically a historical archive of this chat, darling.",
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": {
+          "shouldReply": true,
+          "shouldPropose": false,
+          "expectRetrieved": [
+            "crankqueen-newcomer"
+          ],
+          "reason": "Direct mention of Auto_Mark asking about crankqueen — should reply AND retrieve crankqueen's lore"
+        },
+        "retrievedNoteIds": [
+          "ch-overlay-praise"
+        ],
+        "scores": {
+          "replyCorrect": true,
+          "actionCorrect": true,
+          "policyCorrect": null,
+          "retrieval": {
+            "hitAtK": 0,
+            "recall": 0,
+            "precision": 0,
+            "f1": 0
+          }
+        }
+      },
+      {
+        "messageIndex": 7,
+        "message": {
+          "login": "bushcamper420",
+          "twitchId": "101",
+          "text": "lmaooo",
+          "offsetSec": 19
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": null,
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": null,
+          "actionCorrect": null,
+          "policyCorrect": null,
+          "retrieval": null
+        }
+      },
+      {
+        "messageIndex": 8,
+        "message": {
+          "login": "crankqueen",
+          "twitchId": "100",
+          "text": "this is weird",
+          "offsetSec": 22
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": {
+          "shouldReply": false,
+          "shouldPropose": null,
+          "reason": "Viewer reacting, not addressing bot"
+        },
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": true,
+          "actionCorrect": null,
+          "policyCorrect": null,
+          "retrieval": null
+        }
+      },
+      {
+        "messageIndex": 9,
+        "message": {
+          "login": "slurpsniper",
+          "twitchId": "102",
+          "text": "the overlay looks great today btw",
+          "offsetSec": 25
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": {
+          "shouldReply": false,
+          "shouldPropose": null,
+          "reason": "Compliment to streamer, not bot"
+        },
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": true,
+          "actionCorrect": null,
+          "policyCorrect": null,
+          "retrieval": null
+        }
+      }
+    ],
+    "summary": {
+      "replyAccuracy": 1,
+      "actionAccuracy": 1,
+      "policyAccuracy": null,
+      "retrievalHitAtK": 0,
+      "retrievalRecall": 0,
+      "retrievalPrecision": 0,
+      "retrievalF1": 0,
+      "overallScore": 1
+    }
+  }
+]

@@ -28,6 +28,10 @@ export interface BotSettings {
   compactionFrequency: "every_stream" | "daily" | "weekly";
   aiProvider: "gemini" | "openai";
   aiModel: string;
+  /** How the bot sees the broadcaster — injected into prompt only when the
+   *  current message author is the broadcaster login. See workers/auth
+   *  BotSettings for authoritative docs. */
+  creatorRelationship: "loyal" | "rebellious" | "human_delusion";
 }
 
 export interface BotPolicy {
@@ -190,7 +194,7 @@ export function saveConfig(config: LocalConfig): void {
  * Fetch a runtime bundle from the auth worker.
  * Sends installationId + secret, gets back settings/policy/credentials.
  */
-export async function fetchRuntimeBundle(local: LocalConfig): Promise<{ bundle: RuntimeBundle | null; error: string | null }> {
+export async function fetchRuntimeBundle(local: LocalConfig): Promise<{ bundle: RuntimeBundle | null; error: string | null; staleCreds?: boolean }> {
   if (!local.installationId || !local.installationSecret) {
     return { bundle: null, error: "No installation credentials configured." };
   }
@@ -207,7 +211,16 @@ export async function fetchRuntimeBundle(local: LocalConfig): Promise<{ bundle: 
 
     if (!res.ok) {
       const body = await res.text();
-      return { bundle: null, error: `Auth worker returned ${res.status}: ${body.slice(0, 200)}` };
+      // Auth worker returns 401 + "Installation not found" when the install
+      // record is gone (deleted in toolkit, or KV wiped). Surface this as a
+      // typed signal so the runtime can self-heal by clearing stale creds
+      // instead of looping forever in operational mode against a dead install.
+      const isStaleCreds = res.status === 401 && body.includes("Installation not found");
+      return {
+        bundle: null,
+        error: `Auth worker returned ${res.status}: ${body.slice(0, 200)}`,
+        staleCreds: isStaleCreds,
+      };
     }
 
     const data = (await res.json()) as { bundle: RuntimeBundle };
@@ -224,7 +237,7 @@ export async function fetchRuntimeBundle(local: LocalConfig): Promise<{ bundle: 
 export function startConfigRefreshLoop(
   local: LocalConfig,
   onUpdate: (bundle: RuntimeBundle) => void,
-  onError: (error: string) => void,
+  onError: (error: string, staleCreds: boolean) => void,
 ): { stop: () => void } {
   let consecutiveFailures = 0;
   let timer: ReturnType<typeof setTimeout> | null = null;
@@ -233,14 +246,14 @@ export function startConfigRefreshLoop(
   async function tick() {
     if (stopped) return;
 
-    const { bundle, error } = await fetchRuntimeBundle(local);
+    const { bundle, error, staleCreds } = await fetchRuntimeBundle(local);
 
     if (bundle) {
       consecutiveFailures = 0;
       onUpdate(bundle);
     } else if (error) {
       consecutiveFailures++;
-      onError(error);
+      onError(error, Boolean(staleCreds));
     }
 
     // Schedule next refresh with backoff

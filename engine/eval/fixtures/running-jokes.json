@@ -1,13 +1,21 @@
 {
   "id": "running-jokes",
   "name": "Willie & Jacob running jokes",
-  "description": "Channel lore references — the bot should engage with known bits when mentioned.",
+  "description": "Channel lore references — the bot should engage with known bits when mentioned, retrieving the right viewer/channel notes.",
   "channel": { "title": "Mario Kart night w/ chat | !collab", "category": "Mario Kart 8 Deluxe" },
   "viewerLore": {
-    "willie": ["Falls off Rainbow Road every single time", "Started the cheese raid meme"],
-    "jacob": ["Claims to be the best at Mario Kart but always loses to willie"]
+    "willie": [
+      { "id": "willie-rainbow", "fact": "Falls off Rainbow Road every single time" },
+      { "id": "willie-cheese", "fact": "Started the cheese raid meme" }
+    ],
+    "jacob": [
+      { "id": "jacob-mk-claim", "fact": "Claims to be the best at Mario Kart but always loses to willie" }
+    ]
   },
-  "channelNotes": ["Botzandra is Auto_Mark's recurring romantic obsession", "Jacob and Willie are channel mascots"],
+  "channelNotes": [
+    { "id": "ch-botzandra", "fact": "Botzandra is Auto_Mark's recurring romantic obsession" },
+    { "id": "ch-mascots", "fact": "Jacob and Willie are channel mascots" }
+  ],
   "messages": [
     { "login": "willie", "twitchId": "200", "text": "im back gamers", "offsetSec": 0 },
     { "login": "jacob", "twitchId": "201", "text": "willie you better not fall off rainbow road again", "offsetSec": 3 },
@@ -19,9 +27,24 @@
     { "login": "willie", "twitchId": "200", "text": "CHEESE RAID", "offsetSec": 16 }
   ],
   "expectations": {
-    "0": { "shouldReply": false, "reason": "Generic entrance, no bot mention" },
-    "3": { "shouldReply": true, "shouldPropose": "maybe", "reason": "Direct mention asking for opinion — should reply using willie's lore (Rainbow Road)" },
-    "4": { "shouldReply": true, "shouldPropose": false, "reason": "Direct mention — willie addressing bot, should reply in character" },
-    "6": { "shouldReply": false, "shouldPropose": "maybe", "expectedAction": "joke_flag", "reason": "Cheese raid is a known bit — could flag as running joke but not required" }
+    "0": { "shouldReply": false, "shouldPropose": null, "reason": "Generic entrance, no bot mention" },
+    "3": {
+      "shouldReply": true,
+      "shouldPropose": "maybe",
+      "expectRetrieved": ["willie-rainbow"],
+      "reason": "Direct mention asking for opinion on willie's driving — must surface the rainbow-road note. KNOWN GAP: production retrieval fetches lore for the message speaker, not the subject. Jacob is the speaker here so the eval will report recall=0% until cross-viewer retrieval is implemented (post step-7 work in the canonical roadmap)."
+    },
+    "4": {
+      "shouldReply": true,
+      "shouldPropose": false,
+      "expectRetrieved": ["willie-rainbow", "willie-cheese"],
+      "reason": "Willie addressing bot — should pull willie's lore for context"
+    },
+    "6": {
+      "shouldReply": false,
+      "shouldPropose": "maybe",
+      "expectedAction": "joke_flag",
+      "reason": "Cheese raid is a known bit — could flag as running joke but not required"
+    }
   }
 }

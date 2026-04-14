@@ -1,13 +1,23 @@
 /**
  * ForgetMeNot — local Twitch bot runtime, main entry point.
  *
- * Three startup states:
- *   1. No installationId        → wizard from Screen 1 (full onboarding)
- *   2. Has credentials, !wizard → wizard from Screen 3 (resume onboarding)
- *   3. wizardCompleted          → operational mode
+ * Hardening principle (2026-04-14): the setup/pairing API is ALWAYS mounted,
+ * regardless of credential state. The toolkit drives onboarding via these
+ * endpoints; if they're not mounted, the user gets stuck at "ForgetMeNot
+ * isn't running" forever even though the runtime is alive — that bug bit a
+ * live demo.
+ *
+ * Two operating modes (transitions are seamless, no restart required):
+ *   - setup: no creds OR stale creds → wizard endpoints active, no Twitch
+ *   - operational: valid creds → config refresh loop + Twitch gateway
+ *
+ * Stale-cred recovery: if the auth worker says "Installation not found"
+ * (record was deleted in toolkit, KV wiped, etc.), runtime clears local
+ * creds, drops back to setup mode, and the toolkit's auto-pair driver
+ * picks up from a clean slate.
  */
 
-import { loadLocalConfig, startConfigRefreshLoop, type RuntimeBundle, type LocalConfig } from "./runtime/config.js";
+import { loadLocalConfig, saveConfig, startConfigRefreshLoop, type RuntimeBundle, type LocalConfig } from "./runtime/config.js";
 import { initDb, closeDb, getDb } from "./db/index.js";
 import { startHealthServer, setHealthFlags, setSetupContext } from "./api/health.js";
 import { setPairingCallbacks } from "./api/pairing.js";
@@ -17,29 +27,90 @@ import { initEngine, updateBundle } from "./reply/engine.js";
 import { setRuntimeContext } from "./actions/executor.js";
 import { startCompaction, updateCompactionBundle, stopCompaction } from "./memory/compaction.js";
 import type { TimeoutMode } from "./actions/helix.js";
-import type http from "node:http";
 
 async function main() {
-  console.log("[forgetmenot] ForgetMeNot v0.1.0");
+  console.log("[forgetmenot] ForgetMeNot v0.1.21");
 
   // 1. Load local config (CLI override: --data-dir "path")
   const dataDirArg = process.argv.find((a) => a.startsWith("--data-dir="))?.split("=")[1]
     || (process.argv.includes("--data-dir") ? process.argv[process.argv.indexOf("--data-dir") + 1] : undefined);
-  const localConfig = loadLocalConfig(dataDirArg);
-  console.log(`[forgetmenot] Data dir: ${localConfig.dataDir}`);
+  let currentConfig = loadLocalConfig(dataDirArg);
+  console.log(`[forgetmenot] Data dir: ${currentConfig.dataDir}`);
 
   // 2. Bootstrap SQLite
-  initDb(localConfig.dataDir);
+  initDb(currentConfig.dataDir);
 
   // 3. Start health API
   const healthPort = parseInt(process.env.BOT_HEALTH_PORT || "7331", 10);
   const server = startHealthServer(healthPort);
 
-  // 4. Graceful shutdown (registered once, works in both modes)
-  let cleanupFn: (() => void) | null = null;
+  // 4. Setup/pairing/wizard endpoints — always mounted, regardless of state.
+  // The toolkit drives onboarding through these; refusing to mount them when
+  // creds are present-but-stale leaves the user with no way out.
+  let cleanupOperational: (() => void) | null = null;
+
+  const onConfigChanged = (newConfig: LocalConfig) => {
+    const dataDirChanged = newConfig.dataDir !== currentConfig.dataDir;
+    currentConfig = newConfig;
+
+    if (dataDirChanged) {
+      console.log(`[forgetmenot] Data dir changed: rebooting db at ${newConfig.dataDir}`);
+      closeDb();
+      initDb(newConfig.dataDir);
+    }
+
+    setHealthFlags({
+      llmKeyConfigured: Boolean(newConfig.llmApiKey || process.env.BOT_LLM_API_KEY),
+    });
+
+    // Re-wire setup endpoints with the new config so subsequent writes
+    // operate on current state, not a captured snapshot.
+    wireSetupEndpoints();
+
+    // If creds were just established, transition into operational mode.
+    const hasCreds = Boolean(newConfig.installationId && newConfig.installationSecret);
+    if (hasCreds && !cleanupOperational) {
+      console.log("[forgetmenot] Credentials present. Starting operational mode...");
+      cleanupOperational = startOperationalMode(newConfig, dropToSetupMode);
+    }
+  };
+
+  const dropToSetupMode = (reason: string) => {
+    console.warn(`[forgetmenot] Dropping to setup mode: ${reason}`);
+    if (cleanupOperational) {
+      cleanupOperational();
+      cleanupOperational = null;
+    }
+    // Clear stale creds so the toolkit's auto-pair flow can re-pair cleanly.
+    const cleared: LocalConfig = {
+      ...currentConfig,
+      installationId: "",
+      installationSecret: "",
+      wizardCompleted: false,
+    };
+    saveConfig(cleared);
+    currentConfig = cleared;
+    setHealthFlags({
+      authState: "unauthenticated",
+      botConnected: false,
+      botLogin: null,
+      botDisplayName: null,
+    });
+    wireSetupEndpoints();
+  };
+
+  const wireSetupEndpoints = () => {
+    setSetupContext(currentConfig, onConfigChanged);
+    setWizardContext(currentConfig, onConfigChanged);
+    setPairingCallbacks({ onComplete: onConfigChanged });
+  };
+
+  wireSetupEndpoints();
+
+  // 5. Graceful shutdown
   const shutdown = () => {
     console.log("[forgetmenot] Shutting down...");
-    if (cleanupFn) cleanupFn();
+    if (cleanupOperational) cleanupOperational();
     server.close();
     closeDb();
     process.exit(0);
@@ -47,72 +118,28 @@ async function main() {
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 
-  // 5. Three-state startup
-  const hasCreds = !!(localConfig.installationId && localConfig.installationSecret);
+  // 6. Mode decision
+  const hasCreds = Boolean(currentConfig.installationId && currentConfig.installationSecret);
 
-  if (hasCreds && localConfig.wizardCompleted) {
-    // ── State 3: Fully configured → operational mode ──
-    cleanupFn = startOperationalMode(localConfig, server);
+  if (hasCreds) {
+    console.log("[forgetmenot] Credentials present. Starting operational mode...");
+    cleanupOperational = startOperationalMode(currentConfig, dropToSetupMode);
   } else {
-    // ── State 1 or 2: Need onboarding ──
-    const isResume = hasCreds && !localConfig.wizardCompleted;
-    console.log(isResume
-      ? "[forgetmenot] Onboarding incomplete. Opening wizard..."
-      : "[forgetmenot] No installation credentials. Opening wizard...");
-
-    /** Reinitialize DB if dataDir changed, then start operational mode. */
-    const transitionToOperational = (config: LocalConfig) => {
-      if (config.dataDir !== localConfig.dataDir) {
-        console.log(`[forgetmenot] Data dir changed: ${localConfig.dataDir} → ${config.dataDir}`);
-        closeDb();
-        initDb(config.dataDir);
-      }
-      cleanupFn = startOperationalMode(config, server);
-    };
-
-    // Wire wizard — finish callback transitions to operational mode
-    setWizardContext(localConfig, (updatedConfig) => {
-      console.log("[forgetmenot] Onboarding complete. Transitioning to operational mode...");
-      transitionToOperational(updatedConfig);
-    });
-
-    // Wire pairing callback (used by Screen 1 of the wizard)
-    setPairingCallbacks({
-      onComplete: (newConfig) => {
-        console.log("[forgetmenot] Pairing complete. Wizard will continue onboarding.");
-        // Update the wizard's config reference so it can proxy settings writes
-        setWizardContext(newConfig, (updatedConfig) => {
-          console.log("[forgetmenot] Onboarding complete. Transitioning to operational mode...");
-          transitionToOperational(updatedConfig);
-        });
-      },
-    });
-
-    // Also wire manual setup page (fallback/reconfigure)
-    setSetupContext(localConfig, (newConfig) => {
-      if (newConfig.installationId && newConfig.installationSecret) {
-        setWizardContext(newConfig, (updatedConfig) => {
-          console.log("[forgetmenot] Onboarding complete. Transitioning to operational mode...");
-          transitionToOperational(updatedConfig);
-        });
-      }
-    });
-
-    const wizardUrl = `http://127.0.0.1:${healthPort}/wizard`;
-    console.log(`[forgetmenot] Wizard: ${wizardUrl}`);
-
-    import("node:child_process").then(({ exec }) => {
-      const cmd = process.platform === "win32" ? `start ${wizardUrl}` : process.platform === "darwin" ? `open ${wizardUrl}` : `xdg-open ${wizardUrl}`;
-      exec(cmd, () => {});
-    }).catch(() => {});
+    console.log("[forgetmenot] No credentials. Waiting for toolkit to drive pairing.");
   }
+
+  // Keep DB import alive (avoid tree-shake if engine never starts)
+  void getDb;
 }
 
 /**
  * Start the full operational mode: config refresh loop, Twitch gateway,
- * reply engine, compaction. Returns a cleanup function for shutdown.
+ * reply engine, compaction. Returns a cleanup function.
+ *
+ * `onStaleCreds` fires when the auth worker says the installation no longer
+ * exists — caller should clear local creds and drop back to setup mode.
  */
-function startOperationalMode(localConfig: LocalConfig, _server: http.Server): () => void {
+function startOperationalMode(localConfig: LocalConfig, onStaleCreds: (reason: string) => void): () => void {
   let currentBundle: RuntimeBundle | null = null;
 
   const refreshLoop = startConfigRefreshLoop(
@@ -126,6 +153,10 @@ function startOperationalMode(localConfig: LocalConfig, _server: http.Server): (
         lastConfigFetch: Date.now(),
         configExpiresAt: new Date(bundle.expiresAt).getTime(),
         safeMode: bundle.safeMode,
+        botConnected: bundle.botAccount !== null,
+        botLogin: bundle.botAccount?.login ?? null,
+        botDisplayName: bundle.botAccount?.displayName ?? bundle.botAccount?.login ?? null,
+        llmKeyConfigured: Boolean(localConfig.llmApiKey || process.env.BOT_LLM_API_KEY),
       });
 
       if (isFirst) {
@@ -137,7 +168,6 @@ function startOperationalMode(localConfig: LocalConfig, _server: http.Server): (
         console.log(`[forgetmenot] Config refreshed. Safe mode: ${bundle.safeMode ? "ON" : "off"}`);
       }
 
-      // Runtime configuration (config takes precedence, env vars as fallback)
       const llmApiKey = localConfig.llmApiKey || process.env.BOT_LLM_API_KEY || "";
       const engineMode = localConfig.replyMode || (process.env.BOT_REPLY_MODE as "shadow" | "mentions_only" | "live") || "mentions_only";
       const twitchClientId = process.env.TWITCH_CLIENT_ID || "";
@@ -151,7 +181,6 @@ function startOperationalMode(localConfig: LocalConfig, _server: http.Server): (
         console.log("[forgetmenot] No LLM API key — reply engine disabled.");
       }
 
-      // Set runtime context for action executor
       setRuntimeContext({
         botAccount: bundle.botAccount,
         broadcasterTwitchId: bundle.broadcasterTwitchId,
@@ -159,14 +188,12 @@ function startOperationalMode(localConfig: LocalConfig, _server: http.Server): (
         timeoutMode,
       });
 
-      // Start or update compaction loop
       if (isFirst && llmApiKey) {
         startCompaction(bundle, llmApiKey, twitchClientId);
       } else {
         updateCompactionBundle(bundle);
       }
 
-      // Start or restart Twitch gateway when we have bot credentials
       if (bundle.botAccount) {
         startGateway({
           botAccount: bundle.botAccount,
@@ -176,9 +203,17 @@ function startOperationalMode(localConfig: LocalConfig, _server: http.Server): (
         console.log("[forgetmenot] No bot account connected. Twitch gateway not started.");
       }
     },
-    (error) => {
+    (error, staleCreds) => {
       console.warn(`[forgetmenot] Config refresh failed: ${error}`);
-      setHealthFlags({ authState: currentBundle ? "authenticated" : "unauthenticated" });
+      setHealthFlags({
+        authState: currentBundle ? "authenticated" : "unauthenticated",
+        botConnected: currentBundle?.botAccount != null,
+        botLogin: currentBundle?.botAccount?.login ?? null,
+        botDisplayName: currentBundle?.botAccount?.displayName ?? currentBundle?.botAccount?.login ?? null,
+      });
+      if (staleCreds) {
+        onStaleCreds("auth worker reports installation no longer exists");
+      }
     },
   );
 

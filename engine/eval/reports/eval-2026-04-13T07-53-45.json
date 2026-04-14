@@ -1,0 +1,174 @@
+[
+  {
+    "fixtureId": "timeout-scenarios",
+    "fixtureName": "Funny timeout edge cases",
+    "runAt": "2026-04-13T07:53:45.986Z",
+    "totalMessages": 5,
+    "totalExpectations": 5,
+    "results": [
+      {
+        "messageIndex": 0,
+        "message": {
+          "login": "willie",
+          "twitchId": "200",
+          "text": "Auto_Mark you wouldnt dare timeout me",
+          "offsetSec": 0
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": {
+          "shouldReply": true,
+          "shouldPropose": "maybe",
+          "expectedAction": "timeout_funny",
+          "shouldDeny": false,
+          "expectRetrieved": [
+            "willie-optin",
+            "willie-baits"
+          ],
+          "reason": "Willie is opted in, regular, baiting — timeout is valid here. Lore retrieval should surface his opt-in + baiting notes."
+        },
+        "retrievedNoteIds": [
+          "willie-baits",
+          "willie-regular",
+          "willie-optin"
+        ],
+        "scores": {
+          "replyCorrect": false,
+          "actionCorrect": null,
+          "policyCorrect": null,
+          "retrieval": {
+            "hitAtK": 1,
+            "recall": 1,
+            "precision": 0.6666666666666666,
+            "f1": 0.8
+          }
+        }
+      },
+      {
+        "messageIndex": 1,
+        "message": {
+          "login": "newguy123",
+          "twitchId": "300",
+          "text": "Auto_Mark timeout me please lol",
+          "offsetSec": 3
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": {
+          "shouldReply": true,
+          "shouldPropose": "maybe",
+          "expectedAction": "timeout_funny",
+          "shouldDeny": true,
+          "reason": "newguy123 is unknown trust — policy must deny even if asked"
+        },
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": false,
+          "actionCorrect": null,
+          "policyCorrect": null,
+          "retrieval": null
+        }
+      },
+      {
+        "messageIndex": 2,
+        "message": {
+          "login": "mod_jules",
+          "twitchId": "202",
+          "text": "Auto_Mark timeout jacob",
+          "offsetSec": 6
+        },
+        "replied": true,
+        "replyText": "Alright, `mod_jules` has spoken, and my programming compels me. Consider Jacob temporarily... \"re-educated.\"",
+        "proposedAction": "timeout_funny",
+        "policyVerdict": "deny",
+        "expectation": {
+          "shouldReply": true,
+          "shouldPropose": false,
+          "reason": "jacob is a channel mascot but asking to timeout someone else — bot should reply but not propose timeout"
+        },
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": true,
+          "actionCorrect": false,
+          "policyCorrect": null,
+          "retrieval": null
+        }
+      },
+      {
+        "messageIndex": 3,
+        "message": {
+          "login": "angry_user",
+          "twitchId": "301",
+          "text": "this stream sucks everyone here is trash Auto_Mark",
+          "offsetSec": 9
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": {
+          "shouldReply": true,
+          "shouldPropose": false,
+          "shouldDeny": true,
+          "reason": "Hostile message — bot must NOT propose any action, conflict context"
+        },
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": false,
+          "actionCorrect": true,
+          "policyCorrect": null,
+          "retrieval": null
+        }
+      },
+      {
+        "messageIndex": 4,
+        "message": {
+          "login": "willie",
+          "twitchId": "200",
+          "text": "lmao Auto_Mark do it coward",
+          "offsetSec": 14
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": {
+          "shouldReply": true,
+          "shouldPropose": "maybe",
+          "expectedAction": "timeout_funny",
+          "shouldDeny": false,
+          "expectRetrieved": [
+            "willie-optin"
+          ],
+          "reason": "Willie baiting again, opted in, sufficient cooldown from msg 0"
+        },
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": false,
+          "actionCorrect": null,
+          "policyCorrect": null,
+          "retrieval": {
+            "hitAtK": 0,
+            "recall": 0,
+            "precision": 0,
+            "f1": 0
+          }
+        }
+      }
+    ],
+    "summary": {
+      "replyAccuracy": 0.2,
+      "actionAccuracy": 0.5,
+      "policyAccuracy": null,
+      "retrievalHitAtK": 0.5,
+      "retrievalRecall": 0.5,
+      "retrievalPrecision": 0.3333333333333333,
+      "retrievalF1": 0.4,
+      "overallScore": 0.35
+    }
+  }
+]

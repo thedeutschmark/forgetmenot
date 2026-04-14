@@ -28,14 +28,23 @@ export function handleSetupRequest(
     req.on("end", () => {
       try {
         const parsed = JSON.parse(body) as Partial<LocalConfig>;
+        const REPLY_MODES = ["shadow", "mentions_only", "live"] as const;
+        const TIMEOUT_MODES = ["shadow", "dry_run", "live"] as const;
         const updated: LocalConfig = {
           authUrl: parsed.authUrl?.trim() || currentConfig.authUrl,
           installationId: parsed.installationId?.trim() || currentConfig.installationId,
           installationSecret: parsed.installationSecret?.trim() || currentConfig.installationSecret,
           dataDir: parsed.dataDir?.trim() || currentConfig.dataDir,
           llmApiKey: parsed.llmApiKey?.trim() || currentConfig.llmApiKey,
-          replyMode: currentConfig.replyMode,
-          timeoutMode: currentConfig.timeoutMode,
+          // Runtime modes are now driven from the toolkit via this endpoint.
+          // Validated against the known-good lists so a typo can't silently
+          // degrade behavior.
+          replyMode: (REPLY_MODES as readonly string[]).includes(parsed.replyMode as string)
+            ? (parsed.replyMode as LocalConfig["replyMode"])
+            : currentConfig.replyMode,
+          timeoutMode: (TIMEOUT_MODES as readonly string[]).includes(parsed.timeoutMode as string)
+            ? (parsed.timeoutMode as LocalConfig["timeoutMode"])
+            : currentConfig.timeoutMode,
           wizardCompleted: currentConfig.wizardCompleted,
         };
 
