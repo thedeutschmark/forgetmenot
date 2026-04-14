@@ -14,7 +14,7 @@ import { getDb } from "../db/index.js";
 import { buildReplyContext, type ReplyContext } from "../memory/context.js";
 import { chatCompletion, type LlmMessage } from "../llm/adapter.js";
 import { checkReplyPolicy, isMentionOfBot, recordReply, validateReplyText } from "./policy.js";
-import { assemblePrompt, type PromptMetrics } from "./budget.js";
+import { assemblePrompt, detectTimeoutBait, type PromptMetrics } from "./budget.js";
 import { sendMessage, isConnected } from "../gateway/twitch.js";
 import { parseReplyWithAction } from "../actions/proposals.js";
 import { processAction } from "../actions/executor.js";
@@ -155,6 +155,31 @@ export async function onChatMessage(
 
     // Parse reply text and optional action proposal
     const parsed = parseReplyWithAction(response.text);
+
+    // Bait fallback: if the viewer explicitly demanded a timeout AND fun
+    // moderation is enabled AND the LLM produced reply text but didn't
+    // include the action block, synthesize the proposal in code. The
+    // prompt instructs the LLM to include it, but gemini frequently
+    // ignores that and just verbally agrees ('Fine, you asked for it')
+    // without the [ACTION:] tag. Without this fallback the bait sequence
+    // dies at the LLM step every time.
+    if (
+      !parsed.proposal
+      && detectTimeoutBait(message)
+      && policy.funModerationEnabled
+      && policy.funnyTimeoutEnabled
+    ) {
+      parsed.proposal = {
+        action: "timeout_funny",
+        target: login,
+        targetId: twitchId,
+        duration: 5,
+        reason: "bait_accepted",
+        confidence: 1,
+      };
+      console.log(`[reply] Synthesized timeout_funny proposal for ${login} (bait detected, LLM omitted action)`);
+    }
+
     const replyText = validateReplyText(parsed.text, settings, response.finishReason);
 
     if (!replyText) {
