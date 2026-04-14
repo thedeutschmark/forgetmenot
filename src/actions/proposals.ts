@@ -99,6 +99,9 @@ export function getActionPromptSuffix(enabledClasses: Set<string>): string {
 
   const lines: string[] = [];
   lines.push(
+    "Formatting: Twitch chat is plain text. No markdown renders (no **bold**, no *italics*, no _underscores_ — they show up as literal asterisks and look dumb). To do a narrated action / emote (e.g. tilting head, smirking, feeling something), prefix the ENTIRE message with `/me ` — that renders as italic narration attributed to you. Example: `/me sighs at the chat's audacity`. Don't mix /me with other text; use it only when the whole line is a narrated action.",
+  );
+  lines.push(
     "Actions (optional): you may append ONE action block on a new line after your reply, in the form [ACTION: name key=value key=value]. Never mention the action block in your prose — chat only sees the prose, the action is processed separately.",
   );
 

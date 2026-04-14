@@ -194,9 +194,12 @@ export async function onChatMessage(
     recordReply(login);
 
     // When the bot is answering a specific viewer, prepend @login so the
-    // reply is visibly addressed to them in chat. Skip if the LLM already
-    // started the text with an @mention (avoid double-tagging).
-    const prefixed = /^\s*@/.test(replyText)
+    // reply is visibly addressed. Skip if the LLM already @-tagged someone,
+    // or if this is a /me action message — /me renders as "auto_mark ..."
+    // so an @ prefix would land inside the narration text awkwardly.
+    const isMeAction = /^\s*\/me\s/.test(replyText);
+    const alreadyTagged = /^\s*@/.test(replyText);
+    const prefixed = isMeAction || alreadyTagged
       ? replyText
       : `@${login} ${replyText}`;
 
