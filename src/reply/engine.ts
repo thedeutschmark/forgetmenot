@@ -239,6 +239,18 @@ function shouldAttemptReply(
   // Skip commands
   if (message.startsWith("!")) return false;
 
+  // Skip probabilistic replies on messages with too little signal. Without
+  // this, an emoji-only message like "🐊" can trigger a probabilistic
+  // reply, and the LLM — having no actual content to react to — falls back
+  // to riffing on whatever was in the prior chat thread, producing
+  // nonsensical replies addressed to someone who said nothing meaningful.
+  // Heuristics:
+  //   - Strip emoji/punctuation/whitespace, count remaining alpha chars
+  //   - Require >= 8 chars OR >= 2 distinct words
+  const stripped = message.replace(/[\p{Emoji}\p{Punctuation}\s]+/gu, "");
+  const wordCount = message.trim().split(/\s+/).filter((w) => w.length > 1).length;
+  if (stripped.length < 8 && wordCount < 2) return false;
+
   // Probabilistic reply
   const chance = BASE_REPLY_CHANCE[settings.replyFrequency] ?? 0.1;
   return Math.random() < chance;

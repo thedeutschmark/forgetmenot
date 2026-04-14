@@ -179,7 +179,9 @@ export function assemblePrompt(
         + botReplies.map((r) => `- ${r}`).join("\n"),
       );
     }
-    parts.push(`MESSAGE FROM ${targetLogin}: ${currentMessage}`);
+    parts.push(
+      `MESSAGE FROM ${targetLogin} (this is what you are replying to — react to THIS, not to the chat thread above): ${currentMessage}`,
+    );
 
     return parts.join("\n\n");
   };
