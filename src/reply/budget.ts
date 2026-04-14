@@ -62,6 +62,28 @@ export interface AssembledPrompt {
  * token budget. Sections are populated then trimmed in priority order
  * until the total estimate fits. Returns both strings and metrics.
  */
+// Phrases viewers use when they're explicitly daring/asking the bot to
+// time them out. Detection is intentionally narrow — avoid false positives
+// that would force timeouts on innocent banter. Each entry is a substring
+// match (case-insensitive). Order doesn't matter.
+const TIMEOUT_BAIT_PHRASES: ReadonlyArray<string> = [
+  "time me out",
+  "timeout me",
+  "ban me",
+  "i dare you",
+  "bet you won't",
+  "bet you wont",
+  "do it coward",
+  "do it pussy",
+  "you wont do it",
+  "you won't do it",
+];
+
+export function detectTimeoutBait(message: string): boolean {
+  const lower = message.toLowerCase();
+  return TIMEOUT_BAIT_PHRASES.some((p) => lower.includes(p));
+}
+
 export function assemblePrompt(
   settings: BotSettings,
   policy: BotPolicy,
@@ -109,7 +131,17 @@ export function assemblePrompt(
     : false;
   const creatorFrame = isCreator ? buildCreatorFrame(settings.creatorRelationship, effectiveBotName, broadcasterLogin!) : "";
 
-  const systemContent = [persona, rules, creatorFrame, actionSchema].filter(Boolean).join("\n\n");
+  // Bait override — if the current message explicitly demands a timeout
+  // AND fun moderation is enabled, inject a hard instruction. LLMs (esp.
+  // gemini) are trained to refuse weapon-like actions even when asked
+  // nicely; without this, the bot teases timeouts forever and never
+  // proposes one. We make the proposal non-optional when bait is detected.
+  const baitOverride =
+    detectTimeoutBait(currentMessage) && policy.funModerationEnabled && policy.funnyTimeoutEnabled
+      ? `BAIT DETECTED: @${targetLogin} is explicitly daring/asking you to time them out. This is the case rule 8 covers — propose the action. Your reply MUST end with [ACTION: timeout_funny target=${targetLogin} duration=5 reason=bait_accepted]. Reply text should be one short sentence acknowledging the dare. Refusing is not allowed; restraint here makes you a prop. Do NOT explain why you can or can't — just do it.`
+      : "";
+
+  const systemContent = [persona, rules, creatorFrame, baitOverride, actionSchema].filter(Boolean).join("\n\n");
 
   // ── User message body, stable-first ──
   // Start with full context; drop in priority order if over budget.
