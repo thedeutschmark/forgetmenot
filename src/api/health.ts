@@ -4,6 +4,7 @@ import { handleReviewRequest } from "./review.js";
 import { handleSetupRequest } from "./setup.js";
 import { handlePairingRequest, getPairingState } from "./pairing.js";
 import { handleWizardRequest } from "./wizard.js";
+import { applyCors, handlePreflight } from "./cors.js";
 import { handleControlRequest } from "./control.js";
 import { isPaused, getEngineMode } from "../reply/engine.js";
 import type { LocalConfig } from "../runtime/config.js";
@@ -182,6 +183,12 @@ export function startHealthServer(port: number = 7331): http.Server {
     }
 
     const parsedUrl = new URL(req.url || "/", `http://127.0.0.1:${port}`);
+
+    // Apply CORS headers for any toolkit-origin request, plus handle OPTIONS
+    // preflights up-front. Keeps individual handlers from each having to know
+    // about cross-origin concerns.
+    applyCors(req, res);
+    if (handlePreflight(req, res)) return;
 
     // Wizard (onboarding flow)
     if (handleWizardRequest(req, res, parsedUrl)) return;

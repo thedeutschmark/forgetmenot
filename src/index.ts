@@ -10,7 +10,7 @@
 import { loadLocalConfig, startConfigRefreshLoop, type RuntimeBundle, type LocalConfig } from "./runtime/config.js";
 import { initDb, closeDb, getDb } from "./db/index.js";
 import { startHealthServer, setHealthFlags, setSetupContext } from "./api/health.js";
-import { setPairingCallbacks, startPairing } from "./api/pairing.js";
+import { setPairingCallbacks } from "./api/pairing.js";
 import { setWizardContext } from "./api/wizard.js";
 import { startGateway, stopGateway } from "./gateway/twitch.js";
 import { initEngine, updateBundle } from "./reply/engine.js";
@@ -104,15 +104,13 @@ async function main() {
       }
     });
 
-    // No localhost wizard pop-up. Two things drive setup now:
-    //   1. Tray opens toolkit (source of truth, broadcaster login lives there)
-    //   2. If unpaired, kick off device-code pairing immediately — that opens
-    //      the auth-worker approval page so the broadcaster can sign in and
-    //      link this install in one Twitch-OAuth step. Toolkit reflects the
-    //      result via install-status polling.
+    // Runtime sits idle waiting for the toolkit to drive setup. Tray
+    // opens toolkit on launch; toolkit detects the runtime via /health
+    // and POSTs /setup/pair when ready, then completes pairing
+    // server-side via auth-worker /bot-pairing/complete using the
+    // broadcaster's existing toolkit session. No browser pop-up here.
     if (!hasCreds) {
-      console.log("[forgetmenot] Triggering pairing — approval page will open in browser.");
-      void startPairing(localConfig);
+      console.log("[forgetmenot] No credentials. Waiting for toolkit to drive pairing.");
     } else {
       console.log("[forgetmenot] Paired but onboarding incomplete. Open toolkit to finish setup.");
     }
