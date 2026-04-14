@@ -19,6 +19,12 @@ export interface ViewerContext {
   /** Parallel array — note row IDs in the same order as `notes`. Used by
    *  eval scoring and production observability. Prompt rendering ignores it. */
   noteIds: number[];
+  /** The target viewer's own last messages, oldest first. Twitch convention:
+   *  people split thoughts across multiple lines then @-tag the bot to
+   *  demand an answer — so the bot needs to see what they just said BEFORE
+   *  the @-line to know what they're asking about. Separate from the
+   *  channel-wide `recentMessages` so it survives chat-trim in busy streams. */
+  recentOwnMessages: string[];
 }
 
 export interface ReplyContext {
@@ -76,6 +82,21 @@ export function buildReplyContext(
       `)
       .all(String(viewer.login || "").toLowerCase()) as Array<{ id: number; fact: string }>;
 
+    // Target viewer's own recent chat messages. On Twitch, users frequently
+    // split a single thought across multiple messages ("wait", "actually",
+    // "@bot what I meant was..."), then @-tag the bot to force a reply. If
+    // we only show the single @-message, the bot has no idea what they're
+    // actually asking. Pull their last 5 messages so the intent is visible.
+    const ownMsgs = db
+      .prepare(`
+        SELECT message_text AS text FROM events
+        WHERE event_type = 'chat_message' AND twitch_user_id = ?
+        ORDER BY occurred_at DESC
+        LIMIT 5
+      `)
+      .all(targetTwitchId) as Array<{ text: string }>;
+    ownMsgs.reverse();
+
     targetViewer = {
       login: String(viewer.login || ""),
       displayName: String(viewer.display_name || viewer.login || ""),
@@ -86,6 +107,7 @@ export function buildReplyContext(
       optInFunModeration: Boolean(viewer.opt_in_fun_moderation),
       notes: notes.map((n) => n.fact),
       noteIds: notes.map((n) => Number(n.id)),
+      recentOwnMessages: ownMsgs.map((m) => m.text),
     };
   }
 

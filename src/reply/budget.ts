@@ -133,6 +133,14 @@ export function assemblePrompt(
     if (viewerLore.length > 0) {
       parts.push(`LORE (${targetLogin}):\n` + viewerLore.map((n) => `• ${n}`).join("\n"));
     }
+    // The target viewer's own recent messages — separate from channel CHAT
+    // so the bot sees the @-tagger's prior thoughts even when chat is busy.
+    // Twitch users often split a question across multiple messages then @-tag
+    // to demand reply; this surfaces that intent.
+    const ownMsgs = context.targetViewer?.recentOwnMessages ?? [];
+    if (ownMsgs.length > 0) {
+      parts.push(`RECENT FROM ${targetLogin} (oldest first):\n` + ownMsgs.map((t) => `- ${t}`).join("\n"));
+    }
     if (recentChat.length > 0) {
       const chatLines = recentChat.map((m) => `${m.login}: ${m.text}`).join("\n");
       parts.push("CHAT:\n" + chatLines);
