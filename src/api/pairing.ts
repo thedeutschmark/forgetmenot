@@ -60,7 +60,7 @@ export function handlePairingRequest(
   return false;
 }
 
-async function startPairing(config: LocalConfig) {
+export async function startPairing(config: LocalConfig) {
   state = { status: "polling", pairingCode: null, expiresAt: null, error: null };
 
   try {

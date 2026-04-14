@@ -10,7 +10,7 @@
 import { loadLocalConfig, startConfigRefreshLoop, type RuntimeBundle, type LocalConfig } from "./runtime/config.js";
 import { initDb, closeDb, getDb } from "./db/index.js";
 import { startHealthServer, setHealthFlags, setSetupContext } from "./api/health.js";
-import { setPairingCallbacks } from "./api/pairing.js";
+import { setPairingCallbacks, startPairing } from "./api/pairing.js";
 import { setWizardContext } from "./api/wizard.js";
 import { startGateway, stopGateway } from "./gateway/twitch.js";
 import { initEngine, updateBundle } from "./reply/engine.js";
@@ -104,13 +104,18 @@ async function main() {
       }
     });
 
-    const wizardUrl = `http://127.0.0.1:${healthPort}/wizard`;
-    console.log(`[forgetmenot] Wizard: ${wizardUrl}`);
-
-    import("node:child_process").then(({ exec }) => {
-      const cmd = process.platform === "win32" ? `start ${wizardUrl}` : process.platform === "darwin" ? `open ${wizardUrl}` : `xdg-open ${wizardUrl}`;
-      exec(cmd, () => {});
-    }).catch(() => {});
+    // No localhost wizard pop-up. Two things drive setup now:
+    //   1. Tray opens toolkit (source of truth, broadcaster login lives there)
+    //   2. If unpaired, kick off device-code pairing immediately — that opens
+    //      the auth-worker approval page so the broadcaster can sign in and
+    //      link this install in one Twitch-OAuth step. Toolkit reflects the
+    //      result via install-status polling.
+    if (!hasCreds) {
+      console.log("[forgetmenot] Triggering pairing — approval page will open in browser.");
+      void startPairing(localConfig);
+    } else {
+      console.log("[forgetmenot] Paired but onboarding incomplete. Open toolkit to finish setup.");
+    }
   }
 }
 
