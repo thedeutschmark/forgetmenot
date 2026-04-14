@@ -155,6 +155,13 @@ export function startHealthServer(port: number = 7331): http.Server {
   startTime = Date.now();
 
   const server = http.createServer((req, res) => {
+    // Apply CORS headers + handle OPTIONS preflight FIRST, before any route
+    // handler can early-return. v0.1.1 had this below the /health, /status,
+    // and / handlers, which meant the toolkit's auto-pair driver got a CORS
+    // error on /health and never even reached the runtime check.
+    applyCors(req, res);
+    if (handlePreflight(req, res)) return;
+
     if (req.url === "/health" && req.method === "GET") {
       const health = getHealth();
       res.writeHead(health.status === "ok" ? 200 : health.status === "degraded" ? 200 : 503, {
@@ -183,12 +190,6 @@ export function startHealthServer(port: number = 7331): http.Server {
     }
 
     const parsedUrl = new URL(req.url || "/", `http://127.0.0.1:${port}`);
-
-    // Apply CORS headers for any toolkit-origin request, plus handle OPTIONS
-    // preflights up-front. Keeps individual handlers from each having to know
-    // about cross-origin concerns.
-    applyCors(req, res);
-    if (handlePreflight(req, res)) return;
 
     // Wizard (onboarding flow)
     if (handleWizardRequest(req, res, parsedUrl)) return;
