@@ -181,7 +181,8 @@ export function assemblePrompt(
       );
     }
     parts.push(
-      `MESSAGE FROM ${targetLogin} (this is what you are replying to — react to THIS, not to the chat thread above): ${currentMessage}`,
+      `MESSAGE FROM ${targetLogin}: ${currentMessage}`,
+      `Reply context — what you're answering: this is the latest beat in your ongoing back-and-forth with ${targetLogin}. CONTINUE that thread (use RECENT FROM ${targetLogin} + YOUR RECENT REPLIES to see what's been said). Do NOT invent fresh framing or pull random themes from CHAT messages by other people. If they're escalating ("I dare you", "no really"), you're being challenged on the same point — pick it up, don't start over.`,
     );
 
     return parts.join("\n\n");
