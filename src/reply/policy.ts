@@ -100,19 +100,15 @@ export function validateReplyText(
   cleaned = stripNakedActionLeaks(cleaned);
 
   // Markdown cleanup for Twitch chat:
-  //  - `**bold**` / `__bold__` — just drop the markers (Twitch has no bold)
-  //  - If the whole reply is wrapped in single `*...*`, convert to `/me`.
-  //    /me in IRC renders italic and prefixes with the sender, which is
-  //    exactly what the LLM meant by `*feels flirtatious*`.
-  //  - Inline `*...*` emphases get their markers stripped (content kept).
-  cleaned = cleaned.replace(/\*\*([^*]+)\*\*/g, "$1").replace(/__([^_]+)__/g, "$1");
-
-  const wholeAsteriskWrap = cleaned.match(/^\*([^*]+)\*$/);
-  if (wholeAsteriskWrap) {
-    cleaned = `/me ${wholeAsteriskWrap[1].trim()}`;
-  } else {
-    cleaned = cleaned.replace(/\*([^*\n]+)\*/g, "$1");
-  }
+  //  - `**bold**` / `__bold__` / `*italic*` — all invisible in Twitch.
+  //    Drop the markers, keep the content. We do NOT auto-convert
+  //    asterisk-wrapped text into /me — per 2026-04-14 direction, /me
+  //    should be rare and intentional, picked by the LLM when genuinely
+  //    funny. Mass-converting every `*shrugs*` into /me kills the bit.
+  cleaned = cleaned
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/__([^_]+)__/g, "$1")
+    .replace(/\*([^*\n]+)\*/g, "$1");
 
   // Cap length (Twitch max is 500 chars, but we keep it shorter)
   const maxChars = Math.min(500, settings.maxReplyLength * 4); // rough tokens-to-chars
