@@ -13,32 +13,42 @@ export interface PolicyCheckResult {
   reason: string;
 }
 
-const GLOBAL_COOLDOWN_MS = 5_000;
-const PER_USER_COOLDOWN_MS = 30_000;
+// Cooldowns tuned for the demo scenario: multiple viewers @-mentioning
+// the bot within seconds of each other. 5s global was denying every
+// second mention. Direct mentions now bypass cooldown entirely — the
+// user explicitly asked, so we answer. Autonomous replies still respect
+// both cooldowns so the bot doesn't monopolise chat.
+const GLOBAL_COOLDOWN_MS = 2_000;
+const PER_USER_COOLDOWN_MS = 10_000;
 
 export function checkReplyPolicy(
   settings: BotSettings,
   policy: BotPolicy,
   targetLogin: string,
+  isMention: boolean = false,
 ): PolicyCheckResult {
   // Safe mode blocks everything
   if (policy.safeMode) {
     return { allowed: false, reason: "safe_mode" };
   }
 
-  // Autonomous replies must be enabled
-  if (!policy.autonomousRepliesEnabled) {
+  // Autonomous replies must be enabled for non-mentions. Direct mentions
+  // are always a user-initiated ask and shouldn't be gated by the
+  // autonomous-reply toggle — that toggle is about the bot speaking
+  // unprompted, not about whether it can answer when addressed.
+  if (!policy.autonomousRepliesEnabled && !isMention) {
     return { allowed: false, reason: "autonomous_replies_disabled" };
   }
 
-  // Global cooldown (persisted)
-  if (isCoolingDown("reply:global")) {
-    return { allowed: false, reason: "global_cooldown" };
-  }
-
-  // Per-user cooldown (persisted)
-  if (isCoolingDown(`reply:user:${targetLogin.toLowerCase()}`)) {
-    return { allowed: false, reason: "per_user_cooldown" };
+  // Cooldowns only apply to autonomous replies. Mentions bypass so chat
+  // never sees "global_cooldown" deny on a direct @-ask.
+  if (!isMention) {
+    if (isCoolingDown("reply:global")) {
+      return { allowed: false, reason: "global_cooldown" };
+    }
+    if (isCoolingDown(`reply:user:${targetLogin.toLowerCase()}`)) {
+      return { allowed: false, reason: "per_user_cooldown" };
+    }
   }
 
   // Denylist

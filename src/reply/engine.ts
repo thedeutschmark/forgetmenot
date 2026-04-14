@@ -103,8 +103,8 @@ export async function onChatMessage(
   // Should we attempt a reply?
   if (!shouldAttemptReply(login, message, settings, config.mode, isMention)) return;
 
-  // Policy check
-  const policyResult = checkReplyPolicy(settings, policy, login);
+  // Policy check — mentions bypass cooldowns and the autonomous-replies gate
+  const policyResult = checkReplyPolicy(settings, policy, login, isMention);
   if (!policyResult.allowed) {
     logBlockedAttempt(login, twitchId, "policy", policyResult.reason, isMention);
     return;
@@ -193,12 +193,19 @@ export async function onChatMessage(
     // Record cooldown in ALL modes
     recordReply(login);
 
+    // When the bot is answering a specific viewer, prepend @login so the
+    // reply is visibly addressed to them in chat. Skip if the LLM already
+    // started the text with an @mention (avoid double-tagging).
+    const prefixed = /^\s*@/.test(replyText)
+      ? replyText
+      : `@${login} ${replyText}`;
+
     // Send the reply
     if (config.mode === "shadow") {
-      console.log(`[reply:shadow] → ${login}: ${replyText}`);
+      console.log(`[reply:shadow] → ${login}: ${prefixed}`);
     } else {
-      sendMessage(replyText);
-      console.log(`[reply:${config.mode}] → ${login}: ${replyText}`);
+      sendMessage(prefixed);
+      console.log(`[reply:${config.mode}] → ${login}: ${prefixed}`);
     }
 
     // Process action proposal (if any)

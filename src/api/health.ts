@@ -138,7 +138,7 @@ function getHealth(): HealthStatus {
     botLogin: _botLogin,
     botDisplayName: _botDisplayName,
     llmKeyConfigured: _llmKeyConfigured,
-    version: "0.1.5",
+    version: "0.1.6",
     issues,
   };
 }
