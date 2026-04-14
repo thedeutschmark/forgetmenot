@@ -6,6 +6,7 @@
  */
 
 import { getDb } from "../db/index.js";
+import type { SourceKind } from "./notes.js";
 
 export interface ViewerContext {
   login: string;
@@ -19,6 +20,10 @@ export interface ViewerContext {
   /** Parallel array — note row IDs in the same order as `notes`. Used by
    *  eval scoring and production observability. Prompt rendering ignores it. */
   noteIds: number[];
+  /** Parallel array — provenance kind for each note in `notes`, same
+   *  order. `null` for legacy rows written before schema v3. Used by the
+   *  prompt renderer to tag notes [said] / [reported] / [guess]. */
+  noteKinds: Array<SourceKind | null>;
   /** The target viewer's own last messages, oldest first. Twitch convention:
    *  people split thoughts across multiple lines then @-tag the bot to
    *  demand an answer — so the bot needs to see what they just said BEFORE
@@ -36,6 +41,9 @@ export interface ReplyContext {
   recentNotes: string[];
   /** Parallel array — channel note row IDs in the same order as `recentNotes`. */
   recentNoteIds: number[];
+  /** Parallel array — provenance kind for each channel note. See
+   *  ViewerContext.noteKinds for semantics. */
+  recentNoteKinds: Array<SourceKind | null>;
   /** The bot's last few replies, oldest first. Surfaced in the prompt as
    *  an explicit "you just said these — DO NOT repeat openers, structure,
    *  or specific phrasing" instruction. Without this, gemini happily reuses
@@ -80,12 +88,12 @@ export function buildReplyContext(
     // — see notes.ts line 127). Using twitch_user_id here returns nothing.
     const notes = db
       .prepare(`
-        SELECT id, fact FROM semantic_notes
+        SELECT id, fact, source_kind FROM semantic_notes
         WHERE scope = 'viewer' AND subject_id = ? AND status = 'active'
         ORDER BY last_confirmed_at DESC
         LIMIT 10
       `)
-      .all(String(viewer.login || "").toLowerCase()) as Array<{ id: number; fact: string }>;
+      .all(String(viewer.login || "").toLowerCase()) as Array<{ id: number; fact: string; source_kind: string | null }>;
 
     // Target viewer's own recent chat messages. On Twitch, users frequently
     // split a single thought across multiple messages ("wait", "actually",
@@ -112,6 +120,7 @@ export function buildReplyContext(
       optInFunModeration: Boolean(viewer.opt_in_fun_moderation),
       notes: notes.map((n) => n.fact),
       noteIds: notes.map((n) => Number(n.id)),
+      noteKinds: notes.map((n) => normalizeKind(n.source_kind)),
       recentOwnMessages: ownMsgs.map((m) => m.text),
     };
   }
@@ -134,12 +143,12 @@ export function buildReplyContext(
   // Channel-level semantic notes
   const channelNotes = db
     .prepare(`
-      SELECT id, fact FROM semantic_notes
+      SELECT id, fact, source_kind FROM semantic_notes
       WHERE scope = 'channel' AND status = 'active'
       ORDER BY last_confirmed_at DESC
       LIMIT 5
     `)
-    .all() as Array<{ id: number; fact: string }>;
+    .all() as Array<{ id: number; fact: string; source_kind: string | null }>;
 
   // Bot's own recent replies — fed back into the prompt so the LLM sees
   // its own pattern and breaks out of trope loops. Without this, gemini
@@ -168,6 +177,14 @@ export function buildReplyContext(
     recentEpisodes: episodes.map((e) => e.summary),
     recentNotes: channelNotes.map((n) => n.fact),
     recentNoteIds: channelNotes.map((n) => Number(n.id)),
+    recentNoteKinds: channelNotes.map((n) => normalizeKind(n.source_kind)),
     recentBotReplies,
   };
+}
+
+/** Coerce raw DB value to our SourceKind enum, returning null for unknown
+ *  or legacy values. Keeps invalid data out of the prompt renderer. */
+function normalizeKind(raw: string | null | undefined): SourceKind | null {
+  if (raw === "self_claim" || raw === "reported" || raw === "inferred") return raw;
+  return null;
 }
