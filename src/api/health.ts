@@ -34,6 +34,12 @@ export interface HealthStatus {
    *  whether first-run auto-open is still needed — a "ready" runtime means
    *  bot account connected AND LLM key present, not just one of them. */
   llmKeyConfigured: boolean;
+  /** Reply mode from LocalConfig — toolkit uses this to render the runtime
+   *  mode section and POST updates back via /setup. `null` when no config
+   *  is registered yet (pre-pairing). */
+  replyMode: string | null;
+  /** Timeout mode from LocalConfig — same shape/contract as replyMode. */
+  timeoutMode: string | null;
   version: string;
   issues: string[];
 }
@@ -138,7 +144,9 @@ function getHealth(): HealthStatus {
     botLogin: _botLogin,
     botDisplayName: _botDisplayName,
     llmKeyConfigured: _llmKeyConfigured,
-    version: "0.1.8",
+    replyMode: _localConfig?.replyMode ?? null,
+    timeoutMode: _localConfig?.timeoutMode ?? null,
+    version: "0.1.9",
     issues,
   };
 }
