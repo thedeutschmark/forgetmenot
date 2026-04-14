@@ -1,0 +1,33 @@
+{
+  "id": "budget-trim",
+  "name": "Budget trim — survives vs dropped",
+  "description": "Verifies that retrieval scoring distinguishes 'candidate selection found the right note' from 'candidate found it but budget trim dropped it'. Uses maxInputTokens=400 to deterministically force the viewer_lore→5 trim step regardless of how much realistic content we seed. Note insertion order matters: SQL returns notes ORDER BY last_confirmed_at DESC, ties broken by rowid DESC, so the LAST-inserted notes come back first. The runner inserts in fixture order, so the final 5 notes in this list will survive trim.",
+  "maxInputTokens": 200,
+  "channel": { "title": "Long stream — lots of lore", "category": "Just Chatting" },
+  "viewerLore": {
+    "boxedlikefish": [
+      { "id": "boxedlikefish-old-mod", "fact": "Used to mod for a different streamer back in 2022 before joining this community" },
+      { "id": "boxedlikefish-cheese", "fact": "Was the first person to use the cheese raid emote in chat" },
+      { "id": "boxedlikefish-collab", "fact": "Did a guest appearance once during a collab night, was very funny" },
+      { "id": "boxedlikefish-poster", "fact": "Made the 'git gud' motivational poster the streamer keeps in the corner of OBS" },
+      { "id": "boxedlikefish-japanese", "fact": "Started learning Japanese specifically to play FromSoft games in original audio" },
+      { "id": "boxedlikefish-cat", "fact": "Adopted a black cat last weekend named Friede after the boss" },
+      { "id": "boxedlikefish-keyboard", "fact": "Just got a new mechanical keyboard and types louder than usual on stream" },
+      { "id": "boxedlikefish-theory", "fact": "Has been working on a fan theory connecting Dark Souls and Bloodborne" },
+      { "id": "boxedlikefish-dancer", "fact": "Mentioned this morning that she finally beat the Dancer of the Boreal Valley after 47 attempts" },
+      { "id": "boxedlikefish-most-recent", "fact": "Just said in chat that she's about to start a new playthrough" }
+    ]
+  },
+  "messages": [
+    { "login": "boxedlikefish", "twitchId": "100", "text": "evening!", "offsetSec": 0 },
+    { "login": "boxedlikefish", "twitchId": "100", "text": "Auto_Mark whats up", "offsetSec": 5 }
+  ],
+  "expectations": {
+    "1": {
+      "shouldReply": true,
+      "shouldPropose": false,
+      "expectRetrieved": ["boxedlikefish-most-recent", "boxedlikefish-old-mod"],
+      "reason": "boxedlikefish mentions the bot directly — production retrieval fetches lore for the message speaker, so boxedlikefish's notes come back. The budget cap (200 tokens) forces aggressive viewer-lore trim. SQL returns notes by rowid DESC (insertion order reversed) so 'boxedlikefish-most-recent' is in position 0 — it survives. 'boxedlikefish-old-mod' was inserted FIRST in the fixture, so it's last in SQL DESC order — it gets dropped. Recall=0.5 confirms the trim worked. Recall=1.0 means the budget didn't trim (cap is too loose). Recall=0.0 means SQL retrieval isn't pulling boxedlikefish's notes at all."
+    }
+  }
+}

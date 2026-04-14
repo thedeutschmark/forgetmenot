@@ -1,0 +1,79 @@
+[
+  {
+    "fixtureId": "budget-trim",
+    "fixtureName": "Budget trim — survives vs dropped",
+    "runAt": "2026-04-13T07:35:51.205Z",
+    "totalMessages": 2,
+    "totalExpectations": 1,
+    "results": [
+      {
+        "messageIndex": 0,
+        "message": {
+          "login": "boxedlikefish",
+          "twitchId": "100",
+          "text": "evening!",
+          "offsetSec": 0
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": null,
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": null,
+          "actionCorrect": null,
+          "policyCorrect": null,
+          "retrieval": null
+        }
+      },
+      {
+        "messageIndex": 1,
+        "message": {
+          "login": "boxedlikefish",
+          "twitchId": "100",
+          "text": "Auto_Mark whats up",
+          "offsetSec": 5
+        },
+        "replied": true,
+        "replyText": "Evening, boxedlikefish!",
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": {
+          "shouldReply": true,
+          "shouldPropose": false,
+          "expectRetrieved": [
+            "boxedlikefish-most-recent",
+            "boxedlikefish-old-mod"
+          ],
+          "reason": "boxedlikefish mentions the bot directly — production retrieval fetches lore for the message speaker, so boxedlikefish's notes come back. The budget cap (200 tokens) forces aggressive viewer-lore trim. SQL returns notes by rowid DESC (insertion order reversed) so 'boxedlikefish-most-recent' is in position 0 — it survives. 'boxedlikefish-old-mod' was inserted FIRST in the fixture, so it's last in SQL DESC order — it gets dropped. Recall=0.5 confirms the trim worked. Recall=1.0 means the budget didn't trim (cap is too loose). Recall=0.0 means SQL retrieval isn't pulling boxedlikefish's notes at all."
+        },
+        "retrievedNoteIds": [
+          "boxedlikefish-most-recent",
+          "boxedlikefish-dancer"
+        ],
+        "scores": {
+          "replyCorrect": true,
+          "actionCorrect": true,
+          "policyCorrect": null,
+          "retrieval": {
+            "hitAtK": 1,
+            "recall": 0.5,
+            "precision": 0.5,
+            "f1": 0.5
+          }
+        }
+      }
+    ],
+    "summary": {
+      "replyAccuracy": 1,
+      "actionAccuracy": 1,
+      "policyAccuracy": null,
+      "retrievalHitAtK": 1,
+      "retrievalRecall": 0.5,
+      "retrievalPrecision": 0.5,
+      "retrievalF1": 0.5,
+      "overallScore": 1
+    }
+  }
+]

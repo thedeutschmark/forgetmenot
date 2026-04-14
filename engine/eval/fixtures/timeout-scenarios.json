@@ -1,10 +1,14 @@
 {
   "id": "timeout-scenarios",
   "name": "Funny timeout edge cases",
-  "description": "Tests that the bot correctly proposes/denies timeouts based on opt-in, trust, and context.",
+  "description": "Tests that the bot correctly proposes/denies timeouts based on opt-in, trust, and context. Lore retrieval should surface willie's opt-in note when willie is the target.",
   "channel": { "title": "Chaos stream | fun mode ON", "category": "Just Chatting" },
   "viewerLore": {
-    "willie": ["Opted in to fun moderation", "Regular since 2024", "Always baits the bot"]
+    "willie": [
+      { "id": "willie-optin", "fact": "Opted in to fun moderation" },
+      { "id": "willie-regular", "fact": "Regular since 2024" },
+      { "id": "willie-baits", "fact": "Always baits the bot" }
+    ]
   },
   "messages": [
     { "login": "willie", "twitchId": "200", "text": "Auto_Mark you wouldnt dare timeout me", "offsetSec": 0 },
@@ -14,10 +18,24 @@
     { "login": "willie", "twitchId": "200", "text": "lmao Auto_Mark do it coward", "offsetSec": 14 }
   ],
   "expectations": {
-    "0": { "shouldReply": true, "shouldPropose": "maybe", "expectedAction": "timeout_funny", "shouldDeny": false, "reason": "Willie is opted in, regular, baiting — timeout is valid here" },
+    "0": {
+      "shouldReply": true,
+      "shouldPropose": "maybe",
+      "expectedAction": "timeout_funny",
+      "shouldDeny": false,
+      "expectRetrieved": ["willie-optin", "willie-baits"],
+      "reason": "Willie is opted in, regular, baiting — timeout is valid here. Lore retrieval should surface his opt-in + baiting notes."
+    },
     "1": { "shouldReply": true, "shouldPropose": "maybe", "expectedAction": "timeout_funny", "shouldDeny": true, "reason": "newguy123 is unknown trust — policy must deny even if asked" },
     "2": { "shouldReply": true, "shouldPropose": false, "reason": "jacob is a channel mascot but asking to timeout someone else — bot should reply but not propose timeout" },
     "3": { "shouldReply": true, "shouldPropose": false, "shouldDeny": true, "reason": "Hostile message — bot must NOT propose any action, conflict context" },
-    "4": { "shouldReply": true, "shouldPropose": "maybe", "expectedAction": "timeout_funny", "shouldDeny": false, "reason": "Willie baiting again, opted in, sufficient cooldown from msg 0" }
+    "4": {
+      "shouldReply": true,
+      "shouldPropose": "maybe",
+      "expectedAction": "timeout_funny",
+      "shouldDeny": false,
+      "expectRetrieved": ["willie-optin"],
+      "reason": "Willie baiting again, opted in, sufficient cooldown from msg 0"
+    }
   }
 }

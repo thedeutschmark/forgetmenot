@@ -60,7 +60,7 @@ export function handlePairingRequest(
   return false;
 }
 
-async function startPairing(config: LocalConfig) {
+export async function startPairing(config: LocalConfig) {
   state = { status: "polling", pairingCode: null, expiresAt: null, error: null };
 
   try {
@@ -79,11 +79,12 @@ async function startPairing(config: LocalConfig) {
     const data = (await startRes.json()) as { pairingCode: string; expiresAt: string };
     state = { status: "polling", pairingCode: data.pairingCode, expiresAt: data.expiresAt, error: null };
 
-    // Open approval page in user's browser
-    const approveUrl = `${config.authUrl}/bot-pairing/approve?code=${encodeURIComponent(data.pairingCode)}`;
-    openBrowser(approveUrl);
+    // Toolkit drives completion via session-authenticated POST to the auth
+    // worker's /bot-pairing/complete. Runtime no longer opens a browser tab —
+    // that was the band-aid UX. Runtime just exposes the code via
+    // /setup/pair/status; toolkit reads it and completes server-side.
 
-    // Start polling
+    // Start polling for the auth-worker pairing record being marked complete
     schedulePoll(config, data.pairingCode, new Date(data.expiresAt).getTime());
   } catch (err) {
     state = { status: "error", pairingCode: null, expiresAt: null, error: `Failed to start pairing: ${err instanceof Error ? err.message : String(err)}` };
@@ -147,17 +148,6 @@ function schedulePoll(config: LocalConfig, code: string, expiresAtMs: number) {
       schedulePoll(config, code, expiresAtMs);
     }
   }, POLL_INTERVAL_MS);
-}
-
-function openBrowser(url: string) {
-  import("node:child_process").then(({ exec }) => {
-    const cmd = process.platform === "win32"
-      ? `start "" "${url}"`
-      : process.platform === "darwin"
-        ? `open "${url}"`
-        : `xdg-open "${url}"`;
-    exec(cmd, () => {});
-  }).catch(() => {});
 }
 
 function json(res: ServerResponse, status: number, body: unknown) {

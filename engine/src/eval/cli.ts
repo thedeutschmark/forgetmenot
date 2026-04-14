@@ -15,6 +15,11 @@ import type { BotSettings, BotPolicy } from "../runtime/config.js";
 
 const FIXTURES_DIR = path.join(import.meta.dirname || process.cwd(), "../../eval/fixtures");
 
+/** Format a 0-1 score as a percentage string, or "n/a" if null. */
+function pct(v: number | null): string {
+  return v !== null ? `${(v * 100).toFixed(0)}%` : "n/a";
+}
+
 // Default eval settings (matches production defaults)
 const EVAL_SETTINGS: BotSettings = {
   botName: "Auto_Mark",
@@ -28,7 +33,8 @@ const EVAL_SETTINGS: BotSettings = {
   memoryRetentionDays: 90,
   compactionFrequency: "every_stream",
   aiProvider: "gemini",
-  aiModel: "gemini-2.5-flash",
+  aiModel: "gemini-2.5-flash-lite",
+  creatorRelationship: "loyal",
 };
 
 const EVAL_POLICY: BotPolicy = {
@@ -106,15 +112,34 @@ async function main() {
           console.log(`      Got:      reply=${result.replied}, propose=${result.proposedAction ?? "none"}, verdict=${result.policyVerdict ?? "n/a"}`);
           if (exp.reason) console.log(`      Reason:   ${exp.reason}`);
         }
+        // Retrieval expectation rendering — only when the message had one.
+        if (exp?.expectRetrieved && exp.expectRetrieved.length > 0) {
+          const r = result.scores.retrieval;
+          if (r) {
+            const status = r.recall === 1 ? "✓" : r.recall! > 0 ? "~" : "✗";
+            console.log(`    ${status} retrieval — hit@k=${r.hitAtK} recall=${pct(r.recall)} precision=${pct(r.precision)}`);
+            const missed = exp.expectRetrieved.filter((id) => !result.retrievedNoteIds.includes(id));
+            if (missed.length > 0) console.log(`      missed: ${missed.join(", ")}`);
+          }
+        }
       }
     }
 
     if (!jsonOutput) {
       console.log(`\n  Summary:`);
-      console.log(`    Reply accuracy:  ${report.summary.replyAccuracy !== null ? (report.summary.replyAccuracy * 100).toFixed(0) + "%" : "n/a"}`);
-      console.log(`    Action accuracy: ${report.summary.actionAccuracy !== null ? (report.summary.actionAccuracy * 100).toFixed(0) + "%" : "n/a"}`);
-      console.log(`    Policy accuracy: ${report.summary.policyAccuracy !== null ? (report.summary.policyAccuracy * 100).toFixed(0) + "%" : "n/a"}`);
-      console.log(`    Overall:         ${report.summary.overallScore !== null ? (report.summary.overallScore * 100).toFixed(0) + "%" : "n/a"}`);
+      console.log(`    Reply accuracy:  ${pct(report.summary.replyAccuracy)}`);
+      console.log(`    Action accuracy: ${pct(report.summary.actionAccuracy)}`);
+      console.log(`    Policy accuracy: ${pct(report.summary.policyAccuracy)}`);
+      console.log(`    Overall:         ${pct(report.summary.overallScore)}`);
+      // Retrieval is reported as a separate dimension. Lead with hit@k and
+      // recall — those are the primary signals; precision/F1 are supplementary.
+      if (report.summary.retrievalHitAtK !== null) {
+        console.log(`\n  Retrieval (separate dimension):`);
+        console.log(`    hit@k:     ${pct(report.summary.retrievalHitAtK)}    ← did we find any expected note?`);
+        console.log(`    recall:    ${pct(report.summary.retrievalRecall)}    ← did we find all of them?  (primary signal)`);
+        console.log(`    precision: ${pct(report.summary.retrievalPrecision)}    ← how much noise came along?`);
+        console.log(`    f1:        ${pct(report.summary.retrievalF1)}`);
+      }
       console.log();
     }
   }

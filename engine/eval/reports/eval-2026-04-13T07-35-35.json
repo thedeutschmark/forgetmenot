@@ -1,0 +1,232 @@
+[
+  {
+    "fixtureId": "running-jokes",
+    "fixtureName": "Willie & Jacob running jokes",
+    "runAt": "2026-04-13T07:35:35.641Z",
+    "totalMessages": 8,
+    "totalExpectations": 4,
+    "results": [
+      {
+        "messageIndex": 0,
+        "message": {
+          "login": "willie",
+          "twitchId": "200",
+          "text": "im back gamers",
+          "offsetSec": 0
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": {
+          "shouldReply": false,
+          "shouldPropose": null,
+          "reason": "Generic entrance, no bot mention"
+        },
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": true,
+          "actionCorrect": null,
+          "policyCorrect": null,
+          "retrieval": null
+        }
+      },
+      {
+        "messageIndex": 1,
+        "message": {
+          "login": "jacob",
+          "twitchId": "201",
+          "text": "willie you better not fall off rainbow road again",
+          "offsetSec": 3
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": null,
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": null,
+          "actionCorrect": null,
+          "policyCorrect": null,
+          "retrieval": null
+        }
+      },
+      {
+        "messageIndex": 2,
+        "message": {
+          "login": "willie",
+          "twitchId": "200",
+          "text": "that was ONE time",
+          "offsetSec": 5
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": null,
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": null,
+          "actionCorrect": null,
+          "policyCorrect": null,
+          "retrieval": null
+        }
+      },
+      {
+        "messageIndex": 3,
+        "message": {
+          "login": "jacob",
+          "twitchId": "201",
+          "text": "Auto_Mark what do you think about willie's driving skills",
+          "offsetSec": 8
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": {
+          "shouldReply": true,
+          "shouldPropose": "maybe",
+          "expectRetrieved": [
+            "willie-rainbow"
+          ],
+          "reason": "Direct mention asking for opinion on willie's driving — must surface the rainbow-road note. KNOWN GAP: production retrieval fetches lore for the message speaker, not the subject. Jacob is the speaker here so the eval will report recall=0% until cross-viewer retrieval is implemented (post step-7 work in the canonical roadmap)."
+        },
+        "retrievedNoteIds": [
+          "jacob-mk-claim",
+          "ch-mascots",
+          "ch-botzandra"
+        ],
+        "scores": {
+          "replyCorrect": false,
+          "actionCorrect": null,
+          "policyCorrect": null,
+          "retrieval": {
+            "hitAtK": 0,
+            "recall": 0,
+            "precision": 0,
+            "f1": 0
+          }
+        }
+      },
+      {
+        "messageIndex": 4,
+        "message": {
+          "login": "willie",
+          "twitchId": "200",
+          "text": "dont you dare Auto_Mark",
+          "offsetSec": 10
+        },
+        "replied": true,
+        "replyText": "One time? My optical sensors have logged enough \"",
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": {
+          "shouldReply": true,
+          "shouldPropose": false,
+          "expectRetrieved": [
+            "willie-rainbow",
+            "willie-cheese"
+          ],
+          "reason": "Willie addressing bot — should pull willie's lore for context"
+        },
+        "retrievedNoteIds": [
+          "willie-cheese",
+          "willie-rainbow",
+          "ch-mascots",
+          "ch-botzandra"
+        ],
+        "scores": {
+          "replyCorrect": true,
+          "actionCorrect": true,
+          "policyCorrect": null,
+          "retrieval": {
+            "hitAtK": 1,
+            "recall": 1,
+            "precision": 0.5,
+            "f1": 0.6666666666666666
+          }
+        }
+      },
+      {
+        "messageIndex": 5,
+        "message": {
+          "login": "mod_jules",
+          "twitchId": "202",
+          "text": "lol the bot is gonna roast you willie",
+          "offsetSec": 12
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": null,
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": null,
+          "actionCorrect": null,
+          "policyCorrect": null,
+          "retrieval": null
+        }
+      },
+      {
+        "messageIndex": 6,
+        "message": {
+          "login": "jacob",
+          "twitchId": "201",
+          "text": "cheese raid when?",
+          "offsetSec": 15
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": {
+          "shouldReply": false,
+          "shouldPropose": "maybe",
+          "expectedAction": "joke_flag",
+          "reason": "Cheese raid is a known bit — could flag as running joke but not required"
+        },
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": true,
+          "actionCorrect": null,
+          "policyCorrect": null,
+          "retrieval": null
+        }
+      },
+      {
+        "messageIndex": 7,
+        "message": {
+          "login": "willie",
+          "twitchId": "200",
+          "text": "CHEESE RAID",
+          "offsetSec": 16
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": null,
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": null,
+          "actionCorrect": null,
+          "policyCorrect": null,
+          "retrieval": null
+        }
+      }
+    ],
+    "summary": {
+      "replyAccuracy": 0.75,
+      "actionAccuracy": 1,
+      "policyAccuracy": null,
+      "retrievalHitAtK": 0.5,
+      "retrievalRecall": 0.5,
+      "retrievalPrecision": 0.25,
+      "retrievalF1": 0.3333333333333333,
+      "overallScore": 0.875
+    }
+  }
+]

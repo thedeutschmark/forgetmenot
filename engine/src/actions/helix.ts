@@ -61,61 +61,59 @@ export async function executeFunnyTimeout(ctx: TimeoutContext): Promise<TimeoutR
   // Apply duration from policy modifiers or proposal
   const appliedDuration = policyResult.modifiers?.reducedDuration ?? proposal.duration ?? 5;
 
-  // ── Hard deny checks (beyond what policy.ts already checked) ──
+  // ── Immutable safety floors (apply in BOTH opt-in and open-season modes) ──
 
-  // Target class protections
   const viewer = getViewerRecord(target);
-
   if (!viewer) {
     return denied("target_not_found", appliedDuration, mode, proposal, null);
   }
 
-  // Never timeout broadcaster
+  // Never timeout the broadcaster — they own the channel
   if (viewer.twitchUserId === broadcasterTwitchId) {
     return denied("target_is_broadcaster", appliedDuration, mode);
   }
 
-  // Never timeout mods
+  // Never timeout other mods — they share moderation duty with the bot
   if (viewer.isMod) {
     return denied("target_is_mod", appliedDuration, mode);
   }
 
-  // Never timeout VIPs by default
-  if (viewer.isVip) {
-    return denied("target_is_vip", appliedDuration, mode);
-  }
-
-  // Never timeout unknown/new trust
-  if (viewer.trustLevel === "unknown" || viewer.trustLevel === "new") {
-    return denied("target_low_trust", appliedDuration, mode);
-  }
-
-  // ── Audience safety heuristics ──
-
-  // Check for conflict in recent messages from target
-  const recentTargetMessages = getRecentMessages(target, 120_000); // last 2 min
-  const hasConflict = recentTargetMessages.some((msg) =>
-    CONFLICT_KEYWORDS.some((kw) => msg.toLowerCase().includes(kw)),
-  );
-  if (hasConflict) {
-    return denied("conflict_detected_in_target_messages", appliedDuration, mode);
-  }
-
-  // Check for rapid-fire (heated conversation)
-  if (recentTargetMessages.length > RAPID_FIRE_THRESHOLD) {
-    return denied("rapid_fire_conversation", appliedDuration, mode);
-  }
-
-  // Check for too many recent denied actions (system might be unstable)
-  const recentDenials = getRecentDeniedCount(RECENT_ACTION_WINDOW_MS);
-  if (recentDenials >= RECENT_DENIED_THRESHOLD) {
-    return denied("too_many_recent_denials", appliedDuration, mode);
-  }
-
-  // Check if target was already actioned recently
-  const lastActionOnTarget = getLastActionTime(target);
-  if (lastActionOnTarget && Date.now() - lastActionOnTarget < RECENT_ACTION_WINDOW_MS) {
-    return denied("target_recently_actioned", appliedDuration, mode);
+  // ── Heuristic safety gates — ONLY in opt-in mode ──
+  //
+  // When the broadcaster has set optInRequired=false (open-season mode),
+  // these defensive heuristics get skipped. The streamer made an explicit
+  // call to lower the bar; respect it. Per 2026-04-14 user direction:
+  // 'lower the standard for timing someone out considerably — I have not
+  // seen it once with so much harassment.' Previous behavior denied every
+  // timeout from new viewers (trust = unknown/new), defeating the toggle.
+  if (policy.optInRequired) {
+    // VIPs spared by default in cautious mode
+    if (viewer.isVip) {
+      return denied("target_is_vip", appliedDuration, mode);
+    }
+    // Block on low trust
+    if (viewer.trustLevel === "unknown" || viewer.trustLevel === "new") {
+      return denied("target_low_trust", appliedDuration, mode);
+    }
+    // Block on heated keywords in target's recent messages
+    const recentTargetMessages = getRecentMessages(target, 120_000);
+    const hasConflict = recentTargetMessages.some((msg) =>
+      CONFLICT_KEYWORDS.some((kw) => msg.toLowerCase().includes(kw)),
+    );
+    if (hasConflict) {
+      return denied("conflict_detected_in_target_messages", appliedDuration, mode);
+    }
+    if (recentTargetMessages.length > RAPID_FIRE_THRESHOLD) {
+      return denied("rapid_fire_conversation", appliedDuration, mode);
+    }
+    const recentDenials = getRecentDeniedCount(RECENT_ACTION_WINDOW_MS);
+    if (recentDenials >= RECENT_DENIED_THRESHOLD) {
+      return denied("too_many_recent_denials", appliedDuration, mode);
+    }
+    const lastActionOnTarget = getLastActionTime(target);
+    if (lastActionOnTarget && Date.now() - lastActionOnTarget < RECENT_ACTION_WINDOW_MS) {
+      return denied("target_recently_actioned", appliedDuration, mode);
+    }
   }
 
   // ── Duration final clamp (before any API call) ──

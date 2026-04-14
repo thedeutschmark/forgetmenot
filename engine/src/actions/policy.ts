@@ -44,35 +44,31 @@ export function evaluateAction(
   // ── Target validation (for actions that have a target) ──
 
   if (proposal.target && actionClass === "B") {
-    // Denylist check
+    // Denylist check — always honored (these viewers must NEVER be targeted)
     if (policy.denylist.includes(proposal.target.toLowerCase())) {
       return deny("target_denylisted");
     }
 
-    // Opt-in required check
+    // Opt-in mode: strict — viewer must have opted in OR be allowlisted,
+    // and must have a non-trivial trust history. The safe default for
+    // streamers who don't want surprises.
     if (policy.optInRequired) {
       const viewer = getViewer(proposal.target);
       if (!viewer) {
         return deny("target_unknown");
       }
-
       if (!viewer.optInFunModeration && !policy.allowlist.includes(proposal.target.toLowerCase())) {
         return deny("target_not_opted_in");
       }
-
-      // Trust check — never target new viewers
       if (viewer.trustLevel === "unknown" || viewer.trustLevel === "new") {
         return deny("target_low_trust");
       }
     }
-
-    // Allowlist check (if not opt-in mode, still check allowlist)
-    if (!policy.optInRequired && !policy.allowlist.includes(proposal.target.toLowerCase())) {
-      const viewer = getViewer(proposal.target);
-      if (!viewer || !viewer.isRegular) {
-        return deny("target_not_allowlisted_or_regular");
-      }
-    }
+    // Open-season mode (optInRequired=false): any viewer is fair game
+    // except denylist. Per 2026-04-14 user direction — the previous
+    // "must be regular or allowlisted" guard made the bot refuse every
+    // timeout request from new viewers, even when they harassed it. The
+    // streamer sets optInRequired=false explicitly; respect that choice.
   }
 
   // ── Duration validation (for timeouts) ──

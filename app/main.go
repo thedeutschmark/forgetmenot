@@ -37,6 +37,18 @@ const (
 )
 
 // Embedded flower icons (center color carries runtime status)
+//
+// Color semantics (as of the yellow-healthy remap):
+//   loading  blue    — runtime starting or waiting on auth bundle
+//   healthy  yellow  — all subsystems up
+//   degraded orange  — partial degradation (NOT yellow — kept visually
+//                      distinct from healthy so "mostly fine" doesn't
+//                      read as "all fine" at a glance)
+//   error    red     — runtime unreachable or hard failure
+//   paused   gray    — engine shadowed by user (control surface)
+//go:embed icons/loading.ico
+var iconLoading []byte
+
 //go:embed icons/healthy.ico
 var iconHealthy []byte
 
@@ -51,12 +63,16 @@ var iconPaused []byte
 
 // ── Health response shape (matches services/forgetmenot health.ts) ──
 type HealthStatus struct {
-	Status     string   `json:"status"` // "ok" | "degraded" | "error"
-	Uptime     int      `json:"uptime"`
-	SafeMode   bool     `json:"safeMode"`
-	Paused     bool     `json:"paused"`
-	EngineMode *string  `json:"engineMode"`
-	Issues     []string `json:"issues"`
+	Status           string   `json:"status"` // "ok" | "degraded" | "error"
+	Uptime           int      `json:"uptime"`
+	SafeMode         bool     `json:"safeMode"`
+	Paused           bool     `json:"paused"`
+	EngineMode       *string  `json:"engineMode"`
+	BotConnected     bool     `json:"botConnected"`
+	BotLogin         *string  `json:"botLogin"`
+	BotDisplayName   *string  `json:"botDisplayName"`
+	LlmKeyConfigured bool     `json:"llmKeyConfigured"`
+	Issues           []string `json:"issues"`
 }
 
 // ── Module state (single tray instance, single runtime child) ──
@@ -70,9 +86,22 @@ var (
 	mStatus   *systray.MenuItem
 	mPause    *systray.MenuItem
 	mSafeMode *systray.MenuItem
+
+	// One-shot: open the localhost landing automatically on the FIRST
+	// health response after tray startup, but only when the runtime looks
+	// not-yet-ready (no bot account connected, or explicit error state).
+	// Once the bot is running healthy with a connected account, further
+	// launches should be quiet — no browser pop-up every time.
+	autoOpenedLanding bool
+	autoOpenMu        sync.Mutex
 )
 
 func main() {
+	// If a previous in-place upgrade left .old or .new files, clean them up
+	// before doing anything else (must run before single-instance, since the
+	// single-instance check would block a relaunched-after-update process).
+	cleanupPriorSwap()
+
 	// Single-instance: acquire a Windows mutex
 	if !acquireSingleInstance() {
 		// Another tray is running. Exit silently.
@@ -104,9 +133,9 @@ func acquireSingleInstance() bool {
 
 // ── Tray lifecycle ──
 func onReady() {
-	systray.SetIcon(iconDegraded) // "starting" state
+	systray.SetIcon(iconLoading) // "starting / waiting on bundle" state
 	systray.SetTitle("ForgetMeNot")
-	systray.SetTooltip("ForgetMeNot — starting...")
+	systray.SetTooltip("ForgetMeNot — loading...")
 
 	// Status (disabled, used as a label)
 	mStatus = systray.AddMenuItem("Starting...", "Runtime status")
@@ -132,6 +161,10 @@ func onReady() {
 
 	// Start polling health
 	go pollHealth()
+
+	// Start the GitHub release update checker (explicit-consent only —
+	// adds tray menu items when an update is available, never auto-applies)
+	startUpdateChecker()
 
 	// Handle menu clicks in a loop
 	go func() {
@@ -289,6 +322,31 @@ func fetchAndUpdate() {
 	healthMu.Unlock()
 
 	updateUI(&h)
+
+	// First-run auto-open: if this is the first health response we've
+	// received AND the runtime looks not-ready (no bot account connected),
+	// open the local landing so the user can finish setup without having
+	// to remember the URL or hunt for the tray menu. After any first
+	// successful open, this is skipped for the rest of this tray lifetime.
+	maybeAutoOpenLanding(&h)
+}
+
+func maybeAutoOpenLanding(h *HealthStatus) {
+	autoOpenMu.Lock()
+	defer autoOpenMu.Unlock()
+	if autoOpenedLanding {
+		return
+	}
+	// "Fully ready" = bot account connected AND LLM API key present.
+	// Either one missing means the runtime can't actually reply to chat,
+	// so we open toolkit (the source of truth for setup) so the user can
+	// finish setup there. Toolkit handles broadcaster login + install
+	// state; localhost is only used for the AI-key step inside toolkit.
+	fullyReady := h.BotConnected && h.LlmKeyConfigured
+	autoOpenedLanding = true
+	if !fullyReady {
+		openBrowser(dashboardURL)
+	}
 }
 
 func setUnreachable() {
@@ -313,9 +371,32 @@ func updateUI(h *HealthStatus) {
 	}
 
 	// Tooltip
-	tip := "ForgetMeNot — " + h.Status
-	if h.Paused {
-		tip = "ForgetMeNot — paused"
+	//   healthy:     "ForgetMeNot — Auto_Mark connected"
+	//   no bot:      "ForgetMeNot — no bot account connected"
+	//   degraded:    "ForgetMeNot — degraded · Auto_Mark connected"
+	//   paused:      "ForgetMeNot — paused · Auto_Mark"
+	base := "ForgetMeNot"
+	var botTag string
+	switch {
+	case !h.BotConnected:
+		botTag = "no bot account connected"
+	case h.BotDisplayName != nil && *h.BotDisplayName != "":
+		botTag = *h.BotDisplayName + " connected"
+	case h.BotLogin != nil && *h.BotLogin != "":
+		botTag = *h.BotLogin + " connected"
+	default:
+		// bot flagged connected but names missing — rare edge, still show something
+		botTag = "bot connected"
+	}
+
+	var tip string
+	switch {
+	case h.Paused:
+		tip = base + " — paused · " + botTag
+	case h.Status == "ok":
+		tip = base + " — " + botTag
+	default:
+		tip = base + " — " + h.Status + " · " + botTag
 	}
 	systray.SetTooltip(tip)
 

@@ -103,8 +103,8 @@ export async function onChatMessage(
   // Should we attempt a reply?
   if (!shouldAttemptReply(login, message, settings, config.mode, isMention)) return;
 
-  // Policy check
-  const policyResult = checkReplyPolicy(settings, policy, login);
+  // Policy check — mentions bypass cooldowns and the autonomous-replies gate
+  const policyResult = checkReplyPolicy(settings, policy, login, isMention);
   if (!policyResult.allowed) {
     logBlockedAttempt(login, twitchId, "policy", policyResult.reason, isMention);
     return;
@@ -155,10 +155,12 @@ export async function onChatMessage(
 
     // Parse reply text and optional action proposal
     const parsed = parseReplyWithAction(response.text);
-    const replyText = validateReplyText(parsed.text, settings);
+    const replyText = validateReplyText(parsed.text, settings, response.finishReason);
 
     if (!replyText) {
-      logBlockedAttempt(login, twitchId, "validation", "empty_reply", isMention);
+      const reason =
+        response.finishReason === "length" ? "truncated_reply" : "empty_reply";
+      logBlockedAttempt(login, twitchId, "validation", reason, isMention);
       return;
     }
 
@@ -179,6 +181,9 @@ export async function onChatMessage(
         stablePrefix: metrics.stablePrefixTokens,
         sectionsDropped: metrics.sectionsDropped,
         finalCounts: metrics.finalSectionCounts,
+        // Real SQLite row IDs the LLM actually saw — for cross-referencing
+        // production replies against the eval baseline.
+        retainedNoteIds: metrics.retainedNoteIds,
         contextHash,
         mode: config.mode,
         hasAction: parsed.proposal !== null,
@@ -188,12 +193,22 @@ export async function onChatMessage(
     // Record cooldown in ALL modes
     recordReply(login);
 
+    // When the bot is answering a specific viewer, prepend @login so the
+    // reply is visibly addressed. Skip if the LLM already @-tagged someone,
+    // or if this is a /me action message — /me renders as "auto_mark ..."
+    // so an @ prefix would land inside the narration text awkwardly.
+    const isMeAction = /^\s*\/me\s/.test(replyText);
+    const alreadyTagged = /^\s*@/.test(replyText);
+    const prefixed = isMeAction || alreadyTagged
+      ? replyText
+      : `@${login} ${replyText}`;
+
     // Send the reply
     if (config.mode === "shadow") {
-      console.log(`[reply:shadow] → ${login}: ${replyText}`);
+      console.log(`[reply:shadow] → ${login}: ${prefixed}`);
     } else {
-      sendMessage(replyText);
-      console.log(`[reply:${config.mode}] → ${login}: ${replyText}`);
+      sendMessage(prefixed);
+      console.log(`[reply:${config.mode}] → ${login}: ${prefixed}`);
     }
 
     // Process action proposal (if any)
@@ -223,6 +238,18 @@ function shouldAttemptReply(
 
   // Skip commands
   if (message.startsWith("!")) return false;
+
+  // Skip probabilistic replies on messages with too little signal. Without
+  // this, an emoji-only message like "🐊" can trigger a probabilistic
+  // reply, and the LLM — having no actual content to react to — falls back
+  // to riffing on whatever was in the prior chat thread, producing
+  // nonsensical replies addressed to someone who said nothing meaningful.
+  // Heuristics:
+  //   - Strip emoji/punctuation/whitespace, count remaining alpha chars
+  //   - Require >= 8 chars OR >= 2 distinct words
+  const stripped = message.replace(/[\p{Emoji}\p{Punctuation}\s]+/gu, "");
+  const wordCount = message.trim().split(/\s+/).filter((w) => w.length > 1).length;
+  if (stripped.length < 8 && wordCount < 2) return false;
 
   // Probabilistic reply
   const chance = BASE_REPLY_CHANCE[settings.replyFrequency] ?? 0.1;
@@ -269,7 +296,10 @@ function buildPrompt(
     optInRequired: true, allowlist: [], denylist: [], sensitiveTopics: [], safeMode: true,
   };
 
-  const assembled = assemblePrompt(settings, policy, context, targetLogin, currentMessage, effectiveName);
+  const assembled = assemblePrompt(
+    settings, policy, context, targetLogin, currentMessage, effectiveName,
+    currentBundle?.broadcasterLogin ?? null,
+  );
 
   return {
     messages: [
