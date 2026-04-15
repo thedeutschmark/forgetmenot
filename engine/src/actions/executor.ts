@@ -130,11 +130,6 @@ async function executeAction(proposal: ActionProposal, policyResult: PolicyResul
       } catch { /* don't fail the action on note write failure */ }
       break;
 
-    case "scene_cue":
-      // Log for now — could hook into OBS websocket later
-      console.log(`[action] Scene cue: ${proposal.reason}`);
-      break;
-
     // ── Class B — guarded (Phase 5B) ──
     case "timeout_funny": {
       if (!_runtimeCtx?.botAccount) {
