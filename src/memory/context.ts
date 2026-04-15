@@ -99,12 +99,17 @@ export function buildReplyContext(
     // the dedup path re-enters the retrieval set automatically because
     // its last_confirmed_at jumps to now.
     const staleCutoff = `-${Math.max(1, Math.round(staleDays))} days`;
+    // Retrieval rank = confidence * recency_factor, where recency_factor
+    // decays with age since last_confirmed_at. Blend keeps high-confidence
+    // facts surfaced even as they age, without letting truly ancient
+    // claims beat fresh reconfirmations. See notes below.
     const notes = db
       .prepare(`
         SELECT id, fact, source_kind FROM semantic_notes
         WHERE scope = 'viewer' AND subject_id = ? AND status = 'active'
           AND last_confirmed_at > datetime('now', ?)
-        ORDER BY last_confirmed_at DESC
+        ORDER BY (confidence * (1.0 / (1.0 + (julianday('now') - julianday(last_confirmed_at)) / 7.0))) DESC,
+                 last_confirmed_at DESC
         LIMIT 10
       `)
       .all(String(viewer.login || "").toLowerCase(), staleCutoff) as Array<{ id: number; fact: string; source_kind: string | null }>;
@@ -154,14 +159,16 @@ export function buildReplyContext(
     `)
     .all() as Array<{ summary: string }>;
 
-  // Channel-level semantic notes — same stale filter as viewer notes.
+  // Channel-level semantic notes — same stale filter + same
+  // confidence*recency blend as viewer notes.
   const channelStaleCutoff = `-${Math.max(1, Math.round(staleDays))} days`;
   const channelNotes = db
     .prepare(`
       SELECT id, fact, source_kind FROM semantic_notes
       WHERE scope = 'channel' AND status = 'active'
         AND last_confirmed_at > datetime('now', ?)
-      ORDER BY last_confirmed_at DESC
+      ORDER BY (confidence * (1.0 / (1.0 + (julianday('now') - julianday(last_confirmed_at)) / 7.0))) DESC,
+               last_confirmed_at DESC
       LIMIT 5
     `)
     .all(channelStaleCutoff) as Array<{ id: number; fact: string; source_kind: string | null }>;
