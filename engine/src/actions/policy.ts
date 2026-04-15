@@ -4,7 +4,7 @@
  * The LLM proposes. This module decides. No exceptions.
  *
  * Input: proposal + viewer context + channel policy + runtime state
- * Output: allow / deny / allow_with_modifiers / needs_manual
+ * Output: allow / deny / allow_with_modifiers
  */
 
 import { getDb } from "../db/index.js";
@@ -53,7 +53,7 @@ export function evaluateAction(
     // and must have a non-trivial trust history. The safe default for
     // streamers who don't want surprises.
     if (policy.optInRequired) {
-      const viewer = getViewer(proposal.target);
+      const viewer = getViewerSnapshot(proposal.target);
       if (!viewer) {
         return deny("target_unknown");
       }
@@ -142,7 +142,9 @@ function allowWithModifiers(reason: string, modifiers: PolicyResult["modifiers"]
   return { verdict: "allow_with_modifiers", reason, modifiers };
 }
 
-interface ViewerRecord {
+export interface ViewerSnapshot {
+  twitchUserId: string;
+  login: string;
   trustLevel: string;
   isRegular: boolean;
   isMod: boolean;
@@ -150,15 +152,17 @@ interface ViewerRecord {
   optInFunModeration: boolean;
 }
 
-function getViewer(login: string): ViewerRecord | null {
+export function getViewerSnapshot(login: string): ViewerSnapshot | null {
   try {
     const row = getDb()
-      .prepare("SELECT trust_level, is_regular, is_mod, is_vip, opt_in_fun_moderation FROM viewers WHERE login = ?")
+      .prepare("SELECT twitch_user_id, login, trust_level, is_regular, is_mod, is_vip, opt_in_fun_moderation FROM viewers WHERE login = ?")
       .get(login.toLowerCase()) as Record<string, unknown> | undefined;
 
     if (!row) return null;
 
     return {
+      twitchUserId: String(row.twitch_user_id || ""),
+      login: String(row.login || ""),
       trustLevel: String(row.trust_level || "unknown"),
       isRegular: Boolean(row.is_regular),
       isMod: Boolean(row.is_mod),

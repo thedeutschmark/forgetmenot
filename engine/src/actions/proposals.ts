@@ -23,8 +23,8 @@ const ACTION_NAME_REGEX = /^\s*(\w+)/;
 const PARAM_REGEX = /(\w+)\s*=\s*("(?:[^"\\]|\\.)*"|[^,\s)]+)/g;
 
 const VALID_ACTIONS = new Set<ActionType>([
-  "reply_extra", "clip_mark", "joke_flag", "scene_cue", "warning_playful",
-  "timeout_funny", "emote_only_burst",
+  "reply_extra", "clip_mark", "joke_flag", "warning_playful",
+  "timeout_funny",
   "ban", "timeout_serious", "mod_action",
 ]);
 
