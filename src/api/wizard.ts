@@ -397,6 +397,10 @@ input:focus, select:focus { border-color: #3f3f46; }
     <div><div class="toggle-label">Require viewer opt-in</div><div class="toggle-desc">Only timeout viewers who opted in</div></div>
     <label class="toggle"><input type="checkbox" id="toggleOptIn" checked><span class="slider"></span></label>
   </div>
+  <div class="toggle-row">
+    <div><div class="toggle-label">Thinking allowed <span class="badge">TARS</span></div><div class="toggle-desc">On rare factual questions the bot doesn't know, it hands off to a reasoning model for that single reply. Slim — fires ~1-3% of replies.</div></div>
+    <label class="toggle"><input type="checkbox" id="toggleThinking"><span class="slider"></span></label>
+  </div>
   <div class="nav">
     <button class="btn btn-ghost" onclick="go(4)">Back</button>
     <button class="btn btn-primary" onclick="go(6)">Next</button>
@@ -477,6 +481,7 @@ const wizState = {
   replyFrequency: TEMPLATES[0].replyFrequency,
   autonomousRepliesEnabled: true, funModerationEnabled: false,
   funnyTimeoutEnabled: false, optInRequired: true,
+  thinkingAllowed: false,
   replyMode: 'mentions_only', timeoutMode: 'shadow',
 };
 
@@ -518,6 +523,7 @@ function saveScreenState(n) {
     wizState.funModerationEnabled = document.getElementById('toggleFunMod').checked;
     wizState.funnyTimeoutEnabled = document.getElementById('toggleTimeouts').checked;
     wizState.optInRequired = document.getElementById('toggleOptIn').checked;
+    wizState.thinkingAllowed = document.getElementById('toggleThinking').checked;
   }
   if (n === 6) {
     wizState.replyMode = document.querySelector('input[name="replyMode"]:checked')?.value || 'mentions_only';
@@ -669,6 +675,7 @@ function renderSummary() {
     '<dt>Autonomous replies</dt><dd>' + (wizState.autonomousRepliesEnabled ? 'On' : 'Off') + '</dd>' +
     '<dt>Fun moderation</dt><dd>' + (wizState.funModerationEnabled ? 'On' : 'Off') + '</dd>' +
     '<dt>Opt-in required</dt><dd>' + (wizState.optInRequired ? 'Yes' : 'No') + '</dd>' +
+    '<dt>Thinking allowed</dt><dd>' + (wizState.thinkingAllowed ? 'On (TARS mode)' : 'Off') + '</dd>' +
     '<dt>Data directory</dt><dd style="font-size:11px;word-break:break-all">' + esc(wizState.dataDir) + '</dd>';
 }
 
@@ -699,6 +706,7 @@ async function finish() {
       replyFrequency: wizState.replyFrequency,
       aiProvider: wizState.aiProvider,
       aiModel: wizState.aiModel,
+      thinkingAllowed: wizState.thinkingAllowed,
     },
     policy: {
       autonomousRepliesEnabled: wizState.autonomousRepliesEnabled,
