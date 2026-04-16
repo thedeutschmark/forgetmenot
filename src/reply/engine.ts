@@ -14,7 +14,7 @@ import { getDb } from "../db/index.js";
 import { buildReplyContext, type ReplyContext } from "../memory/context.js";
 import { chatCompletion, type LlmMessage } from "../llm/adapter.js";
 import { checkReplyPolicy, isMentionOfBot, recordReply, validateReplyText } from "./policy.js";
-import { assemblePrompt, detectTimeoutBait, type PromptMetrics } from "./budget.js";
+import { assemblePrompt, detectTimeoutBait, detectDistress, type PromptMetrics } from "./budget.js";
 import { sendMessage, isConnected } from "../gateway/twitch.js";
 import { parseReplyWithAction } from "../actions/proposals.js";
 import { processAction } from "../actions/executor.js";
@@ -176,9 +176,15 @@ export async function onChatMessage(
         const research = await provider.research(sentinel.query);
         researchSource = research.source;
 
+        // Re-assert the date header inside the research note. The reasoning
+        // model (gemini-2.5-pro) ignored the top-of-system timeAnchor on the
+        // 2026-04-16 retest and deflected 2024 F1 / Oasis questions as
+        // "future data" / "temporal spoiler". Putting the anchor ALSO at the
+        // end of the prompt, right before generation, catches that bleed.
+        const todayHeader = `TODAY: ${new Date().toISOString().slice(0, 10)}. 2024 and 2025 events are PAST — do NOT claim they "haven't happened" or "aren't over yet". If you don't know, say "I don't know" plainly.`;
         const researchNote = research.snippets.length > 0
-          ? `RESEARCH CONTEXT for "${sentinel.query}":\n${research.snippets.map((s) => `• ${s}`).join("\n")}\nUse this to answer naturally. Do not cite or mention that research happened.`
-          : `RESEARCH CONTEXT for "${sentinel.query}": no external data available — answer from your own knowledge. Do not mention the gap or that research happened. Keep your voice (HARD RULES still apply).`;
+          ? `${todayHeader}\n\nRESEARCH CONTEXT for "${sentinel.query}":\n${research.snippets.map((s) => `• ${s}`).join("\n")}\nUse this to answer naturally. Do not cite or mention that research happened.`
+          : `${todayHeader}\n\nRESEARCH CONTEXT for "${sentinel.query}": no external data available — answer from your own knowledge, or say "I don't know" if you genuinely don't. Do not mention the gap or that research happened. Keep your voice (HARD RULES still apply).`;
 
         // Swap the system message to strip the RESEARCH MODE block (no
         // sentinel on the re-run) and keep HARD RULES + persona intact.
@@ -235,6 +241,29 @@ export async function onChatMessage(
 
     // Parse reply text and optional action proposal
     const parsed = parseReplyWithAction(response.text);
+
+    // Pathos-gate pre-filter (HARD RULE 14 enforcement at the policy layer).
+    // The LLM alone can't be trusted to hold the gate under banter inertia;
+    // on the 2026-04-16 retest it proposed timeout_funny against "rough day
+    // today" despite the rule in the system prompt. This filter drops any
+    // comedy-class action proposal when the current message contains
+    // distress phrasing — the reply text still ships, but no moderation
+    // action fires. Safe-mode-class actions are covered here too since the
+    // same failure would apply.
+    //
+    // Bait overrides distress: if the viewer explicitly asks to be timed
+    // out AND also drops distress words in the same message, honor the
+    // explicit request. The order below is: detect distress → if also
+    // bait, let it through → otherwise drop the proposal.
+    if (
+      parsed.proposal
+      && (parsed.proposal.action === "timeout_funny" || parsed.proposal.action === "timeout_serious")
+      && detectDistress(message)
+      && !detectTimeoutBait(message)
+    ) {
+      console.log(`[reply] Distress gate — dropping ${parsed.proposal.action} proposal against ${login} (message matched distress phrase, no explicit bait)`);
+      parsed.proposal = null;
+    }
 
     // Bait fallback: if the viewer explicitly demanded a timeout AND fun
     // moderation is enabled AND the LLM produced reply text but didn't

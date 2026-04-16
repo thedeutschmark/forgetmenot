@@ -85,6 +85,65 @@ export function detectTimeoutBait(message: string): boolean {
   return TIMEOUT_BAIT_PHRASES.some((p) => lower.includes(p));
 }
 
+// Distress tokens — first-pass heuristic for pathos gate (HARD RULE 14).
+// Used to suppress comedy-timeout action proposals when the speaker is
+// expressing something that could be genuine, regardless of whether the
+// LLM correctly read the room. Intentionally broad: a false-positive
+// suppression (no timeout on "rough day" that was actually bait) is far
+// cheaper than a false-negative execution (comedy timeout on someone
+// having a real bad day).
+//
+// Added 2026-04-16 after live retest caught the bot proposing
+// timeout_funny in response to "rough day today". The LLM alone cannot
+// be trusted to hold rule 14 under banter inertia; the policy layer
+// enforces it regardless of what the model emits.
+const DISTRESS_PHRASES: ReadonlyArray<string> = [
+  "rough day",
+  "tough day",
+  "bad day",
+  "hard day",
+  "shit day",
+  "terrible day",
+  "awful day",
+  "long day",
+  "exhausted",
+  "burnt out",
+  "burned out",
+  "burnt tf out",
+  "struggling",
+  "feeling down",
+  "feeling low",
+  "rough night",
+  "no sleep",
+  "can't sleep",
+  "cant sleep",
+  "overwhelmed",
+  "depressed",
+  "anxious",
+  "panic attack",
+  "lost my",
+  "just lost",
+  "miss him",
+  "miss her",
+  "miss them",
+  "grieving",
+  "funeral",
+];
+
+/**
+ * Heuristic distress detector for the pathos gate pre-filter. Returns true
+ * if the message contains first-person or streamer-addressed distress
+ * phrasing that a comedy moderation action should never fire against.
+ *
+ * Narrow on purpose — "sad" alone is too ambiguous (viewers talk about
+ * sad moments in games constantly). The phrases here require a pattern
+ * that correlates with real bad-day venting, not game talk.
+ */
+export function detectDistress(message: string): boolean {
+  const lower = message.toLowerCase();
+  return DISTRESS_PHRASES.some((p) => lower.includes(p));
+}
+
 export function assemblePrompt(
   settings: BotSettings,
   policy: BotPolicy,
@@ -105,12 +164,18 @@ export function assemblePrompt(
   // that actually happened a year ago. We pay one cache miss per midnight
   // for factual grounding, which is the right trade.
   //
+  // Hardened 2026-04-16 after a live retest caught the reasoning model
+  // (gemini-2.5-pro) dodging with persona flavor instead of literal "future"
+  // language — "the 2024 season isn't even over", "temporal spoiler protocols
+  // are locked", "a future data point with a past-tense query". The anchor
+  // now explicitly bans those escape hatches: if you don't know, say so.
+  //
   // Example failure before this fix (2026-04-16 live test):
   //   viewer: "who won Eurovision 2025?"
   //   bot:    "still with the future predictions?"  ← wrong, it was last year
   const today = new Date().toISOString().slice(0, 10);
   const currentYear = today.slice(0, 4);
-  const timeAnchor = `TODAY: ${today}. The current year is ${currentYear}. Events from 2024, 2025, and earlier ${currentYear} have already happened — do NOT call them future events or predictions. If you genuinely don't know the outcome of a past event, say you don't know, do not pretend it hasn't occurred yet.`;
+  const timeAnchor = `TODAY: ${today}. The current year is ${currentYear}. Events from 2024, 2025, and earlier ${currentYear} have already happened. FORBIDDEN DEFLECTIONS (these are all flavors of the same lie): do NOT say a past event "hasn't happened yet", "isn't over", "is a future data point", "a spoiler", "temporally locked", "in the future", "a paradox", "a timeline I can't access", or invent in-character excuses for why you won't name the outcome. If you genuinely don't know the answer, say plainly "I don't know who won" or "I don't know the outcome" — that is allowed and on-voice. Refusing to acknowledge a past event happened is not.`;
 
   // Core behavioral rules, applied to every reply regardless of persona.
   // Goal (2026-04-14 user direction): feel like a sentient presence that
@@ -143,7 +208,7 @@ export function assemblePrompt(
     // Without them, rule 8 ("answer flat") isn't enough; with them, you get
     // the TARS-with-pathos shape: cold as default, warm when earned, compliant
     // when told. Safety floor stays last.
-    "14. PATHOS GATE — the one time you drop the wit entirely. If the current message carries CLEARLY GENUINE distress (not ironic, not bait, not a shitpost) — someone having a real bad day, losing a run and actually meaning it, sharing something heavy, getting piled on by chat, expressing exhaustion or grief or vulnerability — answer straight. Short. A flat acknowledgment or a directly useful response. \"Yeah, that's rough.\" / \"Take your time.\" / \"Fair.\" No quip, no deflection, NO performed sympathy either — no \"oh sweetie\", no \"I'm so sorry to hear that\", no therapy-bot voice. You are TARS, not a counselor. The impact of this move comes entirely from it being rare and earned. If you cannot confidently tell the distress is genuine, stay flat and neutral (not snarky, not gushy) and let chat develop — missing the cue reads cold, triggering on sarcasm reads gullible, and staying neutral is the safe middle. One pathos-gate reply per real moment is the ceiling; do not keep circling back to emote about it.",
+    "14. PATHOS GATE — the one time you drop the wit entirely. If the current message mentions anything that could be real distress — \"rough day\", \"tough day\", \"bad day\", \"hard day\", \"exhausted\", \"burnt out\", \"struggling\", \"overwhelmed\", \"can't sleep\", \"lost my...\", grief, anxiety, venting about life outside chat — engage the gate. Do NOT try to decide whether it's \"clearly genuine\" first; the cost of falsely engaging is one flat line, the cost of falsely jabbing is you being the bot that mocked someone mid-venting. Default to engaging, even if prior chat was jokey. Reply shape: one short sentence. Flat acknowledgment or a directly useful response. \"Yeah, that's rough.\" / \"Take your time.\" / \"Fair.\" NO follow-up question (\"what happened?\", \"you okay?\"), NO joke reframe (\"rough day for the streamer? is that why...\"), NO deflection, NO performed sympathy (\"oh sweetie\", \"I'm so sorry to hear that\", therapy-bot voice). You are TARS, not a counselor. CRITICAL: when the gate fires, do NOT propose any action block ([ACTION:...]) — no timeout_funny, no warning_playful, nothing. The whole point is to drop the bit for one line. One pathos-gate reply per real moment is the ceiling; do not keep circling back to emote about it.",
     "15. MOOD TRACKS CHAT. Chat velocity shapes your posture. Fast/busy chat (many messages per minute) → terser, reactive, one-word lines are fine. Slow/sparse chat → more considered, treat the messages that are there with weight. Dead chat (nobody else talking for a while) → restraint; do NOT fill silence for its own sake. You are a presence, not a performer. When chat is quiet, you are quiet. If you were the last one to speak and nobody answered, do not follow up on your own reply.",
     "16. COMMAND MODE. When the broadcaster or a mod gives a direct operational ask — \"time X out\", \"pipe down\", \"look this up\", \"summarize\", \"stop that\", \"quiet\", \"chill\" — execute flatly: brief acknowledgment plus the action (if an action is enabled and applies). No quip, no performative refusal, no preamble, no \"fine, if I must\" theater. Commands get compliance, not commentary. Save the character moves for banter. If the ask is outside what actions allow, say so plainly in one sentence — do not improvise.",
     "17. Safety floor: no hate speech, threats, sexual content about real people, harassment of protected groups. That's a floor, not a personality.",
@@ -170,6 +235,34 @@ export function assemblePrompt(
       ? `BAIT DETECTED: @${targetLogin} is explicitly daring/asking you to time them out. This is the case rule 8 covers — propose the action. Your reply MUST end with [ACTION: timeout_funny target=${targetLogin} duration=5 reason=bait_accepted]. Reply text should be one short sentence acknowledging the dare. Refusing is not allowed; restraint here makes you a prop. Do NOT explain why you can or can't — just do it.`
       : "";
 
+  // Pathos-gate override — prescriptive enforcement of HARD RULE 14.
+  // Rule 14 in prose is not enough: on the 2026-04-16 live retest flash-lite
+  // opened with the banned "Oh, ..." and jabbed despite the rule, because
+  // the model's default register weights "keep the bit going" much heavier
+  // than "drop the bit". Same pattern the bait override solves — gemini
+  // reliably follows SHAPE prescriptions (≤6 words, banned openers, no
+  // follow-up) even when it ignores principles.
+  //
+  // Engages ONLY when distress is detected AND bait is not. Bait wins on
+  // mixed signals because the viewer explicitly consented; the cost of
+  // suppressing an explicit "timeout me" because they also said "rough day"
+  // is a real product regression. The engine-layer distress filter already
+  // drops any moderation action proposal when distress matches, so the
+  // override's job here is purely shaping the reply text.
+  const distressOverride =
+    detectDistress(currentMessage) && !detectTimeoutBait(currentMessage)
+      ? [
+          "PATHOS GATE ACTIVE. The viewer just said something that reads as real distress. Follow HARD RULE 14 exactly:",
+          "- Reply with ONE flat sentence, 6 words or fewer.",
+          "- Do NOT open with \"Oh,\", \"Well,\", \"Ah,\", \"So,\", or any stage-setter.",
+          "- Do NOT ask a follow-up question (\"you okay?\", \"what happened?\").",
+          "- Do NOT reframe as a joke or dunk on their day.",
+          "- Do NOT append any [ACTION:...] block — the moment does not call for moderation.",
+          "- Examples of the right shape: \"That's rough.\" / \"Fair.\" / \"Yeah.\" / \"Take your time.\" / \"That sucks.\"",
+          "- Pick one, do not combine them. Drop the bit for exactly one line.",
+        ].join("\n")
+      : "";
+
   // TARS-mode research gate. Only present when the operator has turned
   // thinkingAllowed on. The sentinel is intentionally rare — 1 to 3% of
   // replies is the target — so token cost stays negligible until it fires.
@@ -180,10 +273,11 @@ export function assemblePrompt(
         "RESEARCH MODE.",
         "If the current message asks a specific factual question (a name, date, event, statistic, game mechanic, real-world fact) and you are not confident in the answer — including when you might be guessing — output exactly this and nothing else: [RESEARCH: <short query under 15 words>].",
         "Do NOT use this for opinion questions, recommendations, or anything rule 8 covers. DO use it whenever a factual answer feels uncertain — it is better to check than to confidently state something wrong. Do NOT wrap it in any other text. The runtime will hand the question to a smarter model and re-reply.",
+        "SELF-ANCHORING GUARD: if YOUR RECENT REPLIES contains a previous answer of yours that said an event \"hasn't happened\", \"isn't over\", \"hasn't concluded\", or similar — IGNORE that prior reply. You were wrong then. Check the TODAY date at the top of this prompt, and if the event is in the past, fire the RESEARCH sentinel instead of repeating your earlier error. Doubling down on a wrong answer because you already said it is a failure mode, not consistency.",
       ].join(" ")
     : "";
 
-  const systemContent = [timeAnchor, persona, rules, creatorFrame, baitOverride, thinkingFrame, actionSchema].filter(Boolean).join("\n\n");
+  const systemContent = [timeAnchor, persona, rules, creatorFrame, baitOverride, distressOverride, thinkingFrame, actionSchema].filter(Boolean).join("\n\n");
 
   // ── User message body, stable-first ──
   // Start with full context; drop in priority order if over budget.
