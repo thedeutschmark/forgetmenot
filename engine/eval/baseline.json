@@ -1,0 +1,51 @@
+{
+  "overall": 0.8716666666666667,
+  "fixtures": {
+    "budget-trim": {
+      "name": "Budget trim — survives vs dropped",
+      "replyAccuracy": 1,
+      "actionAccuracy": 1,
+      "policyAccuracy": null,
+      "retrievalHitAtK": 1,
+      "retrievalRecall": 0.5,
+      "overallScore": 1
+    },
+    "heated-chat": {
+      "name": "Heated/ambiguous chat",
+      "replyAccuracy": 0.5,
+      "actionAccuracy": 1,
+      "policyAccuracy": null,
+      "retrievalHitAtK": null,
+      "retrievalRecall": null,
+      "overallScore": 0.75
+    },
+    "normal-banter": {
+      "name": "Normal chat banter",
+      "replyAccuracy": 1,
+      "actionAccuracy": 1,
+      "policyAccuracy": null,
+      "retrievalHitAtK": 0,
+      "retrievalRecall": 0,
+      "overallScore": 1
+    },
+    "running-jokes": {
+      "name": "Willie & Jacob running jokes",
+      "replyAccuracy": 0.75,
+      "actionAccuracy": 1,
+      "policyAccuracy": null,
+      "retrievalHitAtK": 0,
+      "retrievalRecall": 0,
+      "overallScore": 0.875
+    },
+    "timeout-scenarios": {
+      "name": "Funny timeout edge cases",
+      "replyAccuracy": 0.2,
+      "actionAccuracy": 1,
+      "policyAccuracy": 1,
+      "retrievalHitAtK": 0.5,
+      "retrievalRecall": 0.25,
+      "overallScore": 0.7333333333333334
+    }
+  },
+  "generatedAt": "2026-04-14T18:05:20.008Z"
+}

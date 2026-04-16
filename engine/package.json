@@ -1,6 +1,6 @@
 {
   "name": "@deutschmark/forgetmenot",
-  "version": "0.1.23",
+  "version": "0.1.25",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,7 +10,9 @@
     "build:exe": "node scripts/build-exe.mjs",
     "typecheck": "tsc --noEmit",
     "eval": "tsx src/eval/cli.ts",
-    "eval:json": "tsx src/eval/cli.ts --json"
+    "eval:json": "tsx src/eval/cli.ts --json",
+    "eval:gate": "node scripts/eval-gate.mjs",
+    "eval:baseline": "node scripts/eval-gate.mjs --init"
   },
   "dependencies": {
     "tmi.js": "^1.8.5"

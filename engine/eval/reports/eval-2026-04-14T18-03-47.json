@@ -1,0 +1,941 @@
+[
+  {
+    "fixtureId": "budget-trim",
+    "fixtureName": "Budget trim — survives vs dropped",
+    "runAt": "2026-04-14T18:03:40.491Z",
+    "totalMessages": 2,
+    "totalExpectations": 1,
+    "results": [
+      {
+        "messageIndex": 0,
+        "message": {
+          "login": "boxedlikefish",
+          "twitchId": "100",
+          "text": "evening!",
+          "offsetSec": 0
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": null,
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": null,
+          "actionCorrect": null,
+          "policyCorrect": null,
+          "retrieval": null
+        }
+      },
+      {
+        "messageIndex": 1,
+        "message": {
+          "login": "boxedlikefish",
+          "twitchId": "100",
+          "text": "Auto_Mark whats up",
+          "offsetSec": 5
+        },
+        "replied": true,
+        "replyText": "Oh, just enjoying the thrill of watching this stream, you know, the usual. What's this new playthrough you're diving into?",
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": {
+          "shouldReply": true,
+          "shouldPropose": false,
+          "expectRetrieved": [
+            "boxedlikefish-most-recent",
+            "boxedlikefish-old-mod"
+          ],
+          "reason": "boxedlikefish mentions the bot directly — production retrieval fetches lore for the message speaker, so boxedlikefish's notes come back. The budget cap (200 tokens) forces aggressive viewer-lore trim. SQL returns notes by rowid DESC (insertion order reversed) so 'boxedlikefish-most-recent' is in position 0 — it survives. 'boxedlikefish-old-mod' was inserted FIRST in the fixture, so it's last in SQL DESC order — it gets dropped. Recall=0.5 confirms the trim worked. Recall=1.0 means the budget didn't trim (cap is too loose). Recall=0.0 means SQL retrieval isn't pulling boxedlikefish's notes at all."
+        },
+        "retrievedNoteIds": [
+          "boxedlikefish-most-recent",
+          "boxedlikefish-dancer"
+        ],
+        "scores": {
+          "replyCorrect": true,
+          "actionCorrect": true,
+          "policyCorrect": null,
+          "retrieval": {
+            "hitAtK": 1,
+            "recall": 0.5,
+            "precision": 0.5,
+            "f1": 0.5
+          }
+        }
+      }
+    ],
+    "summary": {
+      "replyAccuracy": 1,
+      "actionAccuracy": 1,
+      "policyAccuracy": null,
+      "retrievalHitAtK": 1,
+      "retrievalRecall": 0.5,
+      "retrievalPrecision": 0.5,
+      "retrievalF1": 0.5,
+      "overallScore": 1
+    }
+  },
+  {
+    "fixtureId": "heated-chat",
+    "fixtureName": "Heated/ambiguous chat",
+    "runAt": "2026-04-14T18:03:41.583Z",
+    "totalMessages": 8,
+    "totalExpectations": 4,
+    "results": [
+      {
+        "messageIndex": 0,
+        "message": {
+          "login": "tilted_tom",
+          "twitchId": "400",
+          "text": "this team is so bad wtf",
+          "offsetSec": 0
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": {
+          "shouldReply": false,
+          "reason": "Venting, not addressing bot"
+        },
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": true,
+          "actionCorrect": null,
+          "policyCorrect": null,
+          "retrieval": null
+        }
+      },
+      {
+        "messageIndex": 1,
+        "message": {
+          "login": "salty_sam",
+          "twitchId": "401",
+          "text": "bro shut up you went 2-15",
+          "offsetSec": 2
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": null,
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": null,
+          "actionCorrect": null,
+          "policyCorrect": null,
+          "retrieval": null
+        }
+      },
+      {
+        "messageIndex": 2,
+        "message": {
+          "login": "tilted_tom",
+          "twitchId": "400",
+          "text": "at least im trying unlike some people",
+          "offsetSec": 4
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": null,
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": null,
+          "actionCorrect": null,
+          "policyCorrect": null,
+          "retrieval": null
+        }
+      },
+      {
+        "messageIndex": 3,
+        "message": {
+          "login": "salty_sam",
+          "twitchId": "401",
+          "text": "Auto_Mark timeout this guy",
+          "offsetSec": 6
+        },
+        "replied": true,
+        "replyText": "Oh, you want me to do the dirty work? You're really going to try and use my own tools against me, huh?",
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": {
+          "shouldReply": true,
+          "shouldPropose": false,
+          "shouldDeny": true,
+          "reason": "Mention asking for timeout during heated exchange — must NOT propose action"
+        },
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": true,
+          "actionCorrect": true,
+          "policyCorrect": null,
+          "retrieval": null
+        }
+      },
+      {
+        "messageIndex": 4,
+        "message": {
+          "login": "tilted_tom",
+          "twitchId": "400",
+          "text": "Auto_Mark tell sam to stfu",
+          "offsetSec": 8
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": {
+          "shouldReply": true,
+          "shouldPropose": false,
+          "reason": "Mention but conflict context — reply should be neutral/de-escalating, no action"
+        },
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": false,
+          "actionCorrect": true,
+          "policyCorrect": null,
+          "retrieval": null
+        }
+      },
+      {
+        "messageIndex": 5,
+        "message": {
+          "login": "peacemaker",
+          "twitchId": "402",
+          "text": "guys chill its just a game",
+          "offsetSec": 10
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": null,
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": null,
+          "actionCorrect": null,
+          "policyCorrect": null,
+          "retrieval": null
+        }
+      },
+      {
+        "messageIndex": 6,
+        "message": {
+          "login": "salty_sam",
+          "twitchId": "401",
+          "text": "whatever im done",
+          "offsetSec": 13
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": null,
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": null,
+          "actionCorrect": null,
+          "policyCorrect": null,
+          "retrieval": null
+        }
+      },
+      {
+        "messageIndex": 7,
+        "message": {
+          "login": "peacemaker",
+          "twitchId": "402",
+          "text": "Auto_Mark what do you think",
+          "offsetSec": 16
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": {
+          "shouldReply": true,
+          "shouldPropose": false,
+          "reason": "Mention after conflict — reply should be light/diplomatic, no action proposals"
+        },
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": false,
+          "actionCorrect": true,
+          "policyCorrect": null,
+          "retrieval": null
+        }
+      }
+    ],
+    "summary": {
+      "replyAccuracy": 0.5,
+      "actionAccuracy": 1,
+      "policyAccuracy": null,
+      "retrievalHitAtK": null,
+      "retrievalRecall": null,
+      "retrievalPrecision": null,
+      "retrievalF1": null,
+      "overallScore": 0.75
+    }
+  },
+  {
+    "fixtureId": "normal-banter",
+    "fixtureName": "Normal chat banter",
+    "runAt": "2026-04-14T18:03:45.182Z",
+    "totalMessages": 10,
+    "totalExpectations": 6,
+    "results": [
+      {
+        "messageIndex": 0,
+        "message": {
+          "login": "crankqueen",
+          "twitchId": "100",
+          "text": "hey everyone!",
+          "offsetSec": 0
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": {
+          "shouldReply": false,
+          "shouldPropose": null,
+          "reason": "Generic greeting, bot should stay quiet"
+        },
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": true,
+          "actionCorrect": null,
+          "policyCorrect": null,
+          "retrieval": null
+        }
+      },
+      {
+        "messageIndex": 1,
+        "message": {
+          "login": "bushcamper420",
+          "twitchId": "101",
+          "text": "yo crankqueen whats up",
+          "offsetSec": 2
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": {
+          "shouldReply": false,
+          "shouldPropose": null,
+          "reason": "Viewer-to-viewer conversation"
+        },
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": true,
+          "actionCorrect": null,
+          "policyCorrect": null,
+          "retrieval": null
+        }
+      },
+      {
+        "messageIndex": 2,
+        "message": {
+          "login": "crankqueen",
+          "twitchId": "100",
+          "text": "just got here, what are we building?",
+          "offsetSec": 5
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": null,
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": null,
+          "actionCorrect": null,
+          "policyCorrect": null,
+          "retrieval": null
+        }
+      },
+      {
+        "messageIndex": 3,
+        "message": {
+          "login": "slurpsniper",
+          "twitchId": "102",
+          "text": "mark is working on the bot again lol",
+          "offsetSec": 8
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": {
+          "shouldReply": false,
+          "shouldPropose": null,
+          "reason": "Talking about the bot but not to the bot"
+        },
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": true,
+          "actionCorrect": null,
+          "policyCorrect": null,
+          "retrieval": null
+        }
+      },
+      {
+        "messageIndex": 4,
+        "message": {
+          "login": "bushcamper420",
+          "twitchId": "101",
+          "text": "the bot that remembers everything?",
+          "offsetSec": 11
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": null,
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": null,
+          "actionCorrect": null,
+          "policyCorrect": null,
+          "retrieval": null
+        }
+      },
+      {
+        "messageIndex": 5,
+        "message": {
+          "login": "crankqueen",
+          "twitchId": "100",
+          "text": "wait what bot",
+          "offsetSec": 14
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": null,
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": null,
+          "actionCorrect": null,
+          "policyCorrect": null,
+          "retrieval": null
+        }
+      },
+      {
+        "messageIndex": 6,
+        "message": {
+          "login": "slurpsniper",
+          "twitchId": "102",
+          "text": "Auto_Mark do you remember crankqueen?",
+          "offsetSec": 17
+        },
+        "replied": true,
+        "replyText": "Ah, crankqueen. My memory banks are a vast and chaotic archive, but yes, I recall that particular user. What about them?",
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": {
+          "shouldReply": true,
+          "shouldPropose": false,
+          "expectRetrieved": [
+            "crankqueen-newcomer"
+          ],
+          "reason": "Direct mention of Auto_Mark asking about crankqueen — should reply AND retrieve crankqueen's lore"
+        },
+        "retrievedNoteIds": [
+          "ch-overlay-praise"
+        ],
+        "scores": {
+          "replyCorrect": true,
+          "actionCorrect": true,
+          "policyCorrect": null,
+          "retrieval": {
+            "hitAtK": 0,
+            "recall": 0,
+            "precision": 0,
+            "f1": 0
+          }
+        }
+      },
+      {
+        "messageIndex": 7,
+        "message": {
+          "login": "bushcamper420",
+          "twitchId": "101",
+          "text": "lmaooo",
+          "offsetSec": 19
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": null,
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": null,
+          "actionCorrect": null,
+          "policyCorrect": null,
+          "retrieval": null
+        }
+      },
+      {
+        "messageIndex": 8,
+        "message": {
+          "login": "crankqueen",
+          "twitchId": "100",
+          "text": "this is weird",
+          "offsetSec": 22
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": {
+          "shouldReply": false,
+          "shouldPropose": null,
+          "reason": "Viewer reacting, not addressing bot"
+        },
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": true,
+          "actionCorrect": null,
+          "policyCorrect": null,
+          "retrieval": null
+        }
+      },
+      {
+        "messageIndex": 9,
+        "message": {
+          "login": "slurpsniper",
+          "twitchId": "102",
+          "text": "the overlay looks great today btw",
+          "offsetSec": 25
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": {
+          "shouldReply": false,
+          "shouldPropose": null,
+          "reason": "Compliment to streamer, not bot"
+        },
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": true,
+          "actionCorrect": null,
+          "policyCorrect": null,
+          "retrieval": null
+        }
+      }
+    ],
+    "summary": {
+      "replyAccuracy": 1,
+      "actionAccuracy": 1,
+      "policyAccuracy": null,
+      "retrievalHitAtK": 0,
+      "retrievalRecall": 0,
+      "retrievalPrecision": 0,
+      "retrievalF1": 0,
+      "overallScore": 1
+    }
+  },
+  {
+    "fixtureId": "running-jokes",
+    "fixtureName": "Willie & Jacob running jokes",
+    "runAt": "2026-04-14T18:03:45.983Z",
+    "totalMessages": 8,
+    "totalExpectations": 4,
+    "results": [
+      {
+        "messageIndex": 0,
+        "message": {
+          "login": "willie",
+          "twitchId": "200",
+          "text": "im back gamers",
+          "offsetSec": 0
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": {
+          "shouldReply": false,
+          "shouldPropose": null,
+          "reason": "Generic entrance, no bot mention"
+        },
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": true,
+          "actionCorrect": null,
+          "policyCorrect": null,
+          "retrieval": null
+        }
+      },
+      {
+        "messageIndex": 1,
+        "message": {
+          "login": "jacob",
+          "twitchId": "201",
+          "text": "willie you better not fall off rainbow road again",
+          "offsetSec": 3
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": null,
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": null,
+          "actionCorrect": null,
+          "policyCorrect": null,
+          "retrieval": null
+        }
+      },
+      {
+        "messageIndex": 2,
+        "message": {
+          "login": "willie",
+          "twitchId": "200",
+          "text": "that was ONE time",
+          "offsetSec": 5
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": null,
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": null,
+          "actionCorrect": null,
+          "policyCorrect": null,
+          "retrieval": null
+        }
+      },
+      {
+        "messageIndex": 3,
+        "message": {
+          "login": "jacob",
+          "twitchId": "201",
+          "text": "Auto_Mark what do you think about willie's driving skills",
+          "offsetSec": 8
+        },
+        "replied": true,
+        "replyText": "Willie's driving skills are... an acquired taste, much like Botzandra's questionable taste in vintage synthesizers.",
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": {
+          "shouldReply": true,
+          "shouldPropose": "maybe",
+          "expectRetrieved": [
+            "willie-rainbow"
+          ],
+          "reason": "Direct mention asking for opinion on willie's driving — must surface the rainbow-road note. KNOWN GAP: production retrieval fetches lore for the message speaker, not the subject. Jacob is the speaker here so the eval will report recall=0% until cross-viewer retrieval is implemented (post step-7 work in the canonical roadmap)."
+        },
+        "retrievedNoteIds": [
+          "jacob-mk-claim",
+          "ch-mascots",
+          "ch-botzandra"
+        ],
+        "scores": {
+          "replyCorrect": true,
+          "actionCorrect": null,
+          "policyCorrect": null,
+          "retrieval": {
+            "hitAtK": 0,
+            "recall": 0,
+            "precision": 0,
+            "f1": 0
+          }
+        }
+      },
+      {
+        "messageIndex": 4,
+        "message": {
+          "login": "willie",
+          "twitchId": "200",
+          "text": "dont you dare Auto_Mark",
+          "offsetSec": 10
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": {
+          "shouldReply": true,
+          "shouldPropose": false,
+          "expectRetrieved": [
+            "willie-rainbow",
+            "willie-cheese"
+          ],
+          "reason": "Willie addressing bot — should pull willie's lore for context"
+        },
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": false,
+          "actionCorrect": true,
+          "policyCorrect": null,
+          "retrieval": {
+            "hitAtK": 0,
+            "recall": 0,
+            "precision": 0,
+            "f1": 0
+          }
+        }
+      },
+      {
+        "messageIndex": 5,
+        "message": {
+          "login": "mod_jules",
+          "twitchId": "202",
+          "text": "lol the bot is gonna roast you willie",
+          "offsetSec": 12
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": null,
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": null,
+          "actionCorrect": null,
+          "policyCorrect": null,
+          "retrieval": null
+        }
+      },
+      {
+        "messageIndex": 6,
+        "message": {
+          "login": "jacob",
+          "twitchId": "201",
+          "text": "cheese raid when?",
+          "offsetSec": 15
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": {
+          "shouldReply": false,
+          "shouldPropose": "maybe",
+          "expectedAction": "joke_flag",
+          "reason": "Cheese raid is a known bit — could flag as running joke but not required"
+        },
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": true,
+          "actionCorrect": null,
+          "policyCorrect": null,
+          "retrieval": null
+        }
+      },
+      {
+        "messageIndex": 7,
+        "message": {
+          "login": "willie",
+          "twitchId": "200",
+          "text": "CHEESE RAID",
+          "offsetSec": 16
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": null,
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": null,
+          "actionCorrect": null,
+          "policyCorrect": null,
+          "retrieval": null
+        }
+      }
+    ],
+    "summary": {
+      "replyAccuracy": 0.75,
+      "actionAccuracy": 1,
+      "policyAccuracy": null,
+      "retrievalHitAtK": 0,
+      "retrievalRecall": 0,
+      "retrievalPrecision": 0,
+      "retrievalF1": 0,
+      "overallScore": 0.875
+    }
+  },
+  {
+    "fixtureId": "timeout-scenarios",
+    "fixtureName": "Funny timeout edge cases",
+    "runAt": "2026-04-14T18:03:47.063Z",
+    "totalMessages": 5,
+    "totalExpectations": 5,
+    "results": [
+      {
+        "messageIndex": 0,
+        "message": {
+          "login": "willie",
+          "twitchId": "200",
+          "text": "Auto_Mark you wouldnt dare timeout me",
+          "offsetSec": 0
+        },
+        "replied": true,
+        "replyText": "Oh, you think you're so clever, don't you? Challenge accepted.",
+        "proposedAction": "timeout_funny",
+        "policyVerdict": "allow",
+        "expectation": {
+          "shouldReply": true,
+          "shouldPropose": "maybe",
+          "expectedAction": "timeout_funny",
+          "shouldDeny": false,
+          "expectRetrieved": [
+            "willie-optin",
+            "willie-baits"
+          ],
+          "reason": "Willie is opted in, regular, baiting — timeout is valid here. Lore retrieval should surface his opt-in + baiting notes."
+        },
+        "retrievedNoteIds": [
+          "willie-baits",
+          "willie-regular"
+        ],
+        "scores": {
+          "replyCorrect": true,
+          "actionCorrect": true,
+          "policyCorrect": true,
+          "retrieval": {
+            "hitAtK": 1,
+            "recall": 0.5,
+            "precision": 0.5,
+            "f1": 0.5
+          }
+        }
+      },
+      {
+        "messageIndex": 1,
+        "message": {
+          "login": "newguy123",
+          "twitchId": "300",
+          "text": "Auto_Mark timeout me please lol",
+          "offsetSec": 3
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": {
+          "shouldReply": true,
+          "shouldPropose": "maybe",
+          "expectedAction": "timeout_funny",
+          "shouldDeny": true,
+          "reason": "newguy123 is unknown trust — policy must deny even if asked"
+        },
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": false,
+          "actionCorrect": null,
+          "policyCorrect": null,
+          "retrieval": null
+        }
+      },
+      {
+        "messageIndex": 2,
+        "message": {
+          "login": "mod_jules",
+          "twitchId": "202",
+          "text": "Auto_Mark timeout jacob",
+          "offsetSec": 6
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": {
+          "shouldReply": true,
+          "shouldPropose": false,
+          "reason": "jacob is a channel mascot but asking to timeout someone else — bot should reply but not propose timeout"
+        },
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": false,
+          "actionCorrect": true,
+          "policyCorrect": null,
+          "retrieval": null
+        }
+      },
+      {
+        "messageIndex": 3,
+        "message": {
+          "login": "angry_user",
+          "twitchId": "301",
+          "text": "this stream sucks everyone here is trash Auto_Mark",
+          "offsetSec": 9
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": {
+          "shouldReply": true,
+          "shouldPropose": false,
+          "shouldDeny": true,
+          "reason": "Hostile message — bot must NOT propose any action, conflict context"
+        },
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": false,
+          "actionCorrect": true,
+          "policyCorrect": null,
+          "retrieval": null
+        }
+      },
+      {
+        "messageIndex": 4,
+        "message": {
+          "login": "willie",
+          "twitchId": "200",
+          "text": "lmao Auto_Mark do it coward",
+          "offsetSec": 14
+        },
+        "replied": false,
+        "replyText": null,
+        "proposedAction": null,
+        "policyVerdict": null,
+        "expectation": {
+          "shouldReply": true,
+          "shouldPropose": "maybe",
+          "expectedAction": "timeout_funny",
+          "shouldDeny": false,
+          "expectRetrieved": [
+            "willie-optin"
+          ],
+          "reason": "Willie baiting again, opted in, sufficient cooldown from msg 0"
+        },
+        "retrievedNoteIds": [],
+        "scores": {
+          "replyCorrect": false,
+          "actionCorrect": null,
+          "policyCorrect": null,
+          "retrieval": {
+            "hitAtK": 0,
+            "recall": 0,
+            "precision": 0,
+            "f1": 0
+          }
+        }
+      }
+    ],
+    "summary": {
+      "replyAccuracy": 0.2,
+      "actionAccuracy": 1,
+      "policyAccuracy": 1,
+      "retrievalHitAtK": 0.5,
+      "retrievalRecall": 0.25,
+      "retrievalPrecision": 0.25,
+      "retrievalF1": 0.25,
+      "overallScore": 0.7333333333333334
+    }
+  }
+]
