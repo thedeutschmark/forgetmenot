@@ -10,7 +10,7 @@ import { isPaused, getEngineMode } from "../reply/engine.js";
 import type { LocalConfig } from "../runtime/config.js";
 
 export interface HealthStatus {
-  status: "ok" | "degraded" | "error";
+  status: "ok" | "starting" | "degraded" | "error";
   uptime: number;
   subsystems: {
     db: "healthy" | "unhealthy";
@@ -59,6 +59,28 @@ let _botDisplayName: string | null = null;
 let _llmKeyConfigured = false;
 
 const CONFIG_STALE_THRESHOLD_MS = 600_000;
+
+// Window after startup where "subsystem X not up yet" is normal boot
+// behavior, not a degraded state. Runtime cold-starts go:
+//   0s   process spawn
+//   1-3s DB + HTTP server up
+//   3-8s auth bundle fetched
+//   5-15s Twitch IRC handshake
+//   10-30s first LLM call + Helix call mark their subsystems healthy
+// 30s is comfortably past the slow end of that sequence. Anything
+// still "not connected" after 30s is a real problem worth surfacing
+// as "degraded".
+const STARTING_WINDOW_MS = 30_000;
+
+// Issues that are expected-during-boot: seeing them inside the starting
+// window means "still spinning up", not "degraded". Anything NOT in this
+// set is a real fault even during boot (e.g. LLM provider returning errors
+// means credentials are wrong, not that we haven't tried yet — we'd only
+// log that after a failed call).
+const STARTUP_TRANSIENT_ISSUES = new Set<string>([
+  "Twitch chat not connected",
+  "Compaction loop stale",
+]);
 
 export function setHealthFlags(flags: {
   authState?: "authenticated" | "unauthenticated" | "expired";
@@ -120,9 +142,20 @@ function getHealth(): HealthStatus {
   if (_helixHealthy === "unhealthy") issues.push("Twitch Helix API returning errors");
   if (_compactionHealthy === "stale") issues.push("Compaction loop stale");
 
-  // Overall status
-  let status: "ok" | "degraded" | "error" = "ok";
-  if (issues.length > 0) status = "degraded";
+  // Overall status. "starting" is a softer intermediate between "ok" and
+  // "degraded" for the narrow window where the process is alive and auth
+  // is good but subsystems are still wiring up. Without this, every cold
+  // start flashes orange in the tray for 10-30s, which reads like a real
+  // fault. A "starting" state that promotes to "degraded" after 30s gives
+  // us honest signaling: this is normal boot, that is a real problem.
+  const uptimeMs = Date.now() - startTime;
+  const withinStartupWindow = uptimeMs < STARTING_WINDOW_MS;
+  const onlyStartupIssues = issues.every((i) => STARTUP_TRANSIENT_ISSUES.has(i));
+
+  let status: "ok" | "starting" | "degraded" | "error" = "ok";
+  if (issues.length > 0) {
+    status = withinStartupWindow && onlyStartupIssues ? "starting" : "degraded";
+  }
   if (dbStatus === "unhealthy" || _authState === "unauthenticated") status = "error";
 
   return {
@@ -146,7 +179,7 @@ function getHealth(): HealthStatus {
     llmKeyConfigured: _llmKeyConfigured,
     replyMode: _localConfig?.replyMode ?? null,
     timeoutMode: _localConfig?.timeoutMode ?? null,
-    version: "0.1.29",
+    version: "0.1.30",
     issues,
   };
 }
@@ -172,7 +205,8 @@ export function startHealthServer(port: number = 7331): http.Server {
 
     if (req.url === "/health" && req.method === "GET") {
       const health = getHealth();
-      res.writeHead(health.status === "ok" ? 200 : health.status === "degraded" ? 200 : 503, {
+      // 200 for ok/starting/degraded (alive, just not perfect), 503 for error.
+      res.writeHead(health.status === "error" ? 503 : 200, {
         "Content-Type": "application/json",
       });
       res.end(JSON.stringify(health));
@@ -254,9 +288,11 @@ function renderRootLanding(config: LocalConfig | null, health: HealthStatus): st
     ? { bg: "#71717a", text: "paused" }
     : health.status === "ok"
       ? { bg: "#facc15", text: "healthy" }
-      : health.status === "degraded"
-        ? { bg: "#f97316", text: "degraded" }
-        : { bg: "#ef4444", text: "error" };
+      : health.status === "starting"
+        ? { bg: "#60a5fa", text: "starting" }
+        : health.status === "degraded"
+          ? { bg: "#f97316", text: "degraded" }
+          : { bg: "#ef4444", text: "error" };
 
   const botLine = health.botConnected && (health.botDisplayName || health.botLogin)
     ? `Bot account: <strong>${escapeHtml(health.botDisplayName || health.botLogin || "")}</strong> connected`
