@@ -9,7 +9,7 @@
  * Plus: viewers, action_logs, bot_messages, channel_state
  */
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 4;
 
 export const MIGRATIONS: string[] = [
   /* v1 — initial schema */
@@ -153,5 +153,62 @@ export const MIGRATIONS: string[] = [
     last_event_id INTEGER,
     status TEXT NOT NULL DEFAULT 'idle'
   );
+  `,
+
+  /* v3 — source-attributed notes (Step 3 of stabilization week, 2026-04-14)
+   *
+   * Adds three columns to semantic_notes so every stored fact answers
+   * "where did this come from?". Columns are nullable because every
+   * pre-existing row has unknown provenance — treating "legacy" as a
+   * distinct state keeps the bot from silently reclassifying old data.
+   *
+   *   source_kind        — 'self_claim' (speaker said it about themselves)
+   *                        | 'reported'   (someone else said it about the subject)
+   *                        | 'inferred'   (derived from behavior, not directly stated)
+   *                        | NULL         (legacy row, provenance unknown)
+   *   source_snippet     — ≤200 chars of the originating text (kept for
+   *                        operator review + future selective prompt use;
+   *                        NOT rendered in the default lore prompt)
+   *   source_episode_id  — proper FK to episodes.id (the existing
+   *                        supporting_evidence column held this as a
+   *                        stringified number; keep it as fallback)
+   *
+   * ALTER TABLE ADD COLUMN is idempotent across reruns only via the
+   * schema-version gate — this migration runs exactly once per install.
+   */
+  `
+  ALTER TABLE semantic_notes ADD COLUMN source_kind TEXT;
+  ALTER TABLE semantic_notes ADD COLUMN source_snippet TEXT;
+  ALTER TABLE semantic_notes ADD COLUMN source_episode_id INTEGER REFERENCES episodes(id);
+  CREATE INDEX IF NOT EXISTS idx_notes_source_episode ON semantic_notes(source_episode_id);
+  `,
+
+  /* v4 — stream sessions (cross-stream recall)
+   *
+   * Adds a stream_sessions table so episodes can be grouped by broadcast.
+   * channel.ts detects is_live transitions via the Helix sync and opens/
+   * closes sessions accordingly. On close, a recap is generated from the
+   * session's episodes — this is the durable narrative memory that
+   * survives after individual episodes age out of the retrieval window.
+   *
+   * episodes.stream_session_id is nullable: legacy episodes and episodes
+   * created when the bot starts mid-stream (no transition detected) get
+   * NULL, which retrieval handles gracefully by treating them as
+   * "current or unknown" session.
+   */
+  `
+  CREATE TABLE IF NOT EXISTS stream_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    started_at TEXT NOT NULL DEFAULT (datetime('now')),
+    ended_at TEXT,
+    title TEXT,
+    category TEXT,
+    recap TEXT,
+    episode_count INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE INDEX IF NOT EXISTS idx_sessions_started ON stream_sessions(started_at DESC);
+
+  ALTER TABLE episodes ADD COLUMN stream_session_id INTEGER REFERENCES stream_sessions(id);
+  CREATE INDEX IF NOT EXISTS idx_episodes_session ON episodes(stream_session_id);
   `,
 ];

@@ -14,7 +14,6 @@
 
 import { getDb } from "../db/index.js";
 import { sendMessage } from "../gateway/twitch.js";
-import { getViewerSnapshot, type ViewerSnapshot } from "./policy.js";
 import type { ActionProposal, PolicyResult } from "./types.js";
 import type { BotPolicy, BotAccountCredentials, TimeoutMode } from "../runtime/config.js";
 
@@ -64,7 +63,7 @@ export async function executeFunnyTimeout(ctx: TimeoutContext): Promise<TimeoutR
 
   // ── Immutable safety floors (apply in BOTH opt-in and open-season modes) ──
 
-  const viewer = getViewerSnapshot(target);
+  const viewer = getViewerRecord(target);
   if (!viewer) {
     return denied("target_not_found", appliedDuration, mode, proposal, null);
   }
@@ -202,6 +201,34 @@ function denied(reason: string, duration: number, mode: TimeoutMode, proposal?: 
     );
   } catch { /* don't let logging break the denial */ }
   return { executed: false, mode, appliedDuration: duration, deniedReason: reason };
+}
+
+interface ViewerSnapshot {
+  twitchUserId: string;
+  login: string;
+  trustLevel: string;
+  isMod: boolean;
+  isVip: boolean;
+  isRegular: boolean;
+  optInFunModeration: boolean;
+}
+
+function getViewerRecord(login: string): ViewerSnapshot | null {
+  try {
+    const row = getDb()
+      .prepare("SELECT twitch_user_id, login, trust_level, is_mod, is_vip, is_regular, opt_in_fun_moderation FROM viewers WHERE login = ?")
+      .get(login) as Record<string, unknown> | undefined;
+    if (!row) return null;
+    return {
+      twitchUserId: String(row.twitch_user_id || ""),
+      login: String(row.login || ""),
+      trustLevel: String(row.trust_level || "unknown"),
+      isMod: Boolean(row.is_mod),
+      isVip: Boolean(row.is_vip),
+      isRegular: Boolean(row.is_regular),
+      optInFunModeration: Boolean(row.opt_in_fun_moderation),
+    };
+  } catch { return null; }
 }
 
 function getRecentMessages(login: string, windowMs: number): string[] {
