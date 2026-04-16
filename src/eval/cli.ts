@@ -35,6 +35,7 @@ const EVAL_SETTINGS: BotSettings = {
   aiProvider: "gemini",
   aiModel: "gemini-2.5-flash-lite",
   creatorRelationship: "loyal",
+  thinkingAllowed: false,
 };
 
 const EVAL_POLICY: BotPolicy = {

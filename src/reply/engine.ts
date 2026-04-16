@@ -19,6 +19,11 @@ import { sendMessage, isConnected } from "../gateway/twitch.js";
 import { parseReplyWithAction } from "../actions/proposals.js";
 import { processAction } from "../actions/executor.js";
 import { ACTION_CLASS } from "../actions/types.js";
+import {
+  getResearchProvider,
+  parseResearchSentinel,
+  pickResearchModel,
+} from "../research/provider.js";
 import type { BotSettings, RuntimeBundle } from "../runtime/config.js";
 import crypto from "node:crypto";
 
@@ -150,10 +155,50 @@ export async function onChatMessage(
     .slice(0, 12);
 
   try {
-    const response = await chatCompletion(
+    let response = await chatCompletion(
       { provider: settings.aiProvider, model: settings.aiModel, apiKey: config.apiKey },
       { messages, maxTokens: settings.maxReplyLength, temperature: 0.9 },
     );
+
+    // TARS-mode research gate. Fires only when the operator enabled
+    // thinkingAllowed AND the main model emitted the [RESEARCH:] sentinel.
+    // One re-run with the reasoning model. We don't loop — if the reasoning
+    // model also punts, that's a real gap and we fall through to fallback
+    // handling like any other short reply.
+    let researchFired = false;
+    let researchSource = "none";
+    if (settings.thinkingAllowed) {
+      const sentinel = parseResearchSentinel(response.text);
+      if (sentinel) {
+        researchFired = true;
+        const provider = getResearchProvider();
+        const research = await provider.research(sentinel.query);
+        researchSource = research.source;
+
+        const researchNote = research.snippets.length > 0
+          ? `RESEARCH CONTEXT for "${sentinel.query}":\n${research.snippets.map((s) => `• ${s}`).join("\n")}\nUse this to answer naturally. Do not cite or mention that research happened.`
+          : `RESEARCH CONTEXT for "${sentinel.query}": no external data available — answer from your own knowledge. Do not mention the gap or that research happened. Keep your voice (HARD RULES still apply).`;
+
+        // Swap the system message to strip the RESEARCH MODE block (no
+        // sentinel on the re-run) and keep HARD RULES + persona intact.
+        // Append the research note as a second system turn so the model
+        // sees it as instruction, not chat content.
+        const reasoningMessages: LlmMessage[] = [
+          ...messages,
+          { role: "system", content: researchNote },
+        ];
+
+        const reasoningModel = pickResearchModel(settings.aiProvider);
+        console.log(`[reply] TARS re-run: model=${reasoningModel} source=${researchSource} query="${sentinel.query.slice(0, 80)}"`);
+
+        response = await chatCompletion(
+          { provider: settings.aiProvider, model: reasoningModel, apiKey: config.apiKey },
+          // Slightly higher budget because reasoning models narrate more
+          // before settling; still well under a generic "thinking" quota.
+          { messages: reasoningMessages, maxTokens: Math.max(settings.maxReplyLength, 180), temperature: 0.8 },
+        );
+      }
+    }
 
     // Parse reply text and optional action proposal
     const parsed = parseReplyWithAction(response.text);
@@ -214,6 +259,8 @@ export async function onChatMessage(
         contextHash,
         mode: config.mode,
         hasAction: parsed.proposal !== null,
+        researchFired,
+        researchSource,
       }),
     );
 

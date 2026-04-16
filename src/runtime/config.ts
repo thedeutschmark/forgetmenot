@@ -32,6 +32,10 @@ export interface BotSettings {
    *  current message author is the broadcaster login. See workers/auth
    *  BotSettings for authoritative docs. */
   creatorRelationship: "loyal" | "rebellious" | "human_delusion";
+  /** TARS-mode research gate. When true, the bot signals factual unknowns
+   *  via a [RESEARCH:] sentinel and the runtime re-runs with a reasoning
+   *  model. Off by default. See workers/auth BotSettings for full docs. */
+  thinkingAllowed: boolean;
 }
 
 export interface BotPolicy {
