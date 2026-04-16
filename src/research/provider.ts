@@ -85,3 +85,15 @@ export function pickResearchModel(provider: "gemini" | "openai"): string {
   // o1/o3 while still a real step up from mini variants.
   return "gpt-4o";
 }
+
+/**
+ * Lighter fallback for when the primary reasoning model fails (503 from a
+ * congested Pro endpoint, empty output from burned thinking budget, etc).
+ * The philosophy from the operator: "sometimes it just won't work and give
+ * a dumb answer — that's better than trying way too hard". A correct-ish
+ * Flash reply always beats a silent drop.
+ */
+export function pickResearchFallbackModel(provider: "gemini" | "openai"): string {
+  if (provider === "gemini") return "gemini-2.5-flash";
+  return "gpt-4o-mini";
+}

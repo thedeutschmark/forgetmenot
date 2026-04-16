@@ -22,6 +22,7 @@ import { ACTION_CLASS } from "../actions/types.js";
 import {
   getResearchProvider,
   parseResearchSentinel,
+  pickResearchFallbackModel,
   pickResearchModel,
 } from "../research/provider.js";
 import type { BotSettings, RuntimeBundle } from "../runtime/config.js";
@@ -191,12 +192,44 @@ export async function onChatMessage(
         const reasoningModel = pickResearchModel(settings.aiProvider);
         console.log(`[reply] TARS re-run: model=${reasoningModel} source=${researchSource} query="${sentinel.query.slice(0, 80)}"`);
 
-        response = await chatCompletion(
-          { provider: settings.aiProvider, model: reasoningModel, apiKey: config.apiKey },
-          // Slightly higher budget because reasoning models narrate more
-          // before settling; still well under a generic "thinking" quota.
-          { messages: reasoningMessages, maxTokens: Math.max(settings.maxReplyLength, 180), temperature: 0.8 },
-        );
+        // Try the primary reasoning model, then fall back to a lighter
+        // model if it 503s or returns empty text. Pro is congested enough
+        // that ~5-10% of re-runs 503 even after the adapter's retries;
+        // Pro's hidden-thinking budget can also fully consume max_tokens
+        // on borderline queries, yielding a zero-character visible reply.
+        // A mediocre Flash answer beats a silent drop on either path.
+        let reasoningResult: Awaited<ReturnType<typeof chatCompletion>> | null = null;
+        let reasoningError: unknown = null;
+        try {
+          reasoningResult = await chatCompletion(
+            { provider: settings.aiProvider, model: reasoningModel, apiKey: config.apiKey },
+            // Reasoning models (gemini-2.5-pro) spend tokens on hidden
+            // thinking before they produce the visible reply. If we only
+            // allot ~500 they blow the whole budget on thinking and return
+            // an empty message — which looks identical to a silent failure.
+            // 4000 gives thinking ~3500 and a normal chat reply ~500.
+            { messages: reasoningMessages, maxTokens: 4000, temperature: 0.8 },
+          );
+        } catch (err) {
+          reasoningError = err;
+        }
+
+        const primaryEmpty = reasoningResult !== null && !reasoningResult.text.trim();
+        if (reasoningError !== null || primaryEmpty) {
+          const fallbackModel = pickResearchFallbackModel(settings.aiProvider);
+          const cause = reasoningError
+            ? `error: ${reasoningError instanceof Error ? reasoningError.message.slice(0, 120) : String(reasoningError).slice(0, 120)}`
+            : "empty_reply";
+          console.log(`[reply] TARS fallback: ${fallbackModel} (${cause})`);
+          researchSource = `${researchSource}+fallback`;
+          reasoningResult = await chatCompletion(
+            { provider: settings.aiProvider, model: fallbackModel, apiKey: config.apiKey },
+            // Flash has no hidden thinking — normal budget is fine.
+            { messages: reasoningMessages, maxTokens: settings.maxReplyLength, temperature: 0.8 },
+          );
+        }
+
+        response = reasoningResult!;
       }
     }
 

@@ -146,7 +146,7 @@ function getHealth(): HealthStatus {
     llmKeyConfigured: _llmKeyConfigured,
     replyMode: _localConfig?.replyMode ?? null,
     timeoutMode: _localConfig?.timeoutMode ?? null,
-    version: "0.1.28",
+    version: "0.1.29",
     issues,
   };
 }

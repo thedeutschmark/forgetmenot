@@ -36,6 +36,10 @@ export interface BotSettings {
    *  via a [RESEARCH:] sentinel and the runtime re-runs with a reasoning
    *  model. Off by default. See workers/auth BotSettings for full docs. */
   thinkingAllowed: boolean;
+  /** When true the runtime leaves its console window visible after
+   *  startup; when false it hides the window (Windows only). Read once
+   *  at startup — toggling at runtime requires a restart. */
+  showTerminal: boolean;
 }
 
 export interface BotPolicy {

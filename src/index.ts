@@ -26,10 +26,11 @@ import { startGateway, stopGateway } from "./gateway/twitch.js";
 import { initEngine, updateBundle } from "./reply/engine.js";
 import { setRuntimeContext } from "./actions/executor.js";
 import { startCompaction, updateCompactionBundle, stopCompaction, flushCurrentSessionForShutdown } from "./memory/compaction.js";
+import { hideConsoleWindowIfRequested } from "./runtime/console-visibility.js";
 import type { TimeoutMode } from "./actions/helix.js";
 
 async function main() {
-  console.log("[forgetmenot] ForgetMeNot v0.1.28");
+  console.log("[forgetmenot] ForgetMeNot v0.1.29");
 
   // 1. Load local config (CLI override: --data-dir "path")
   const dataDirArg = process.argv.find((a) => a.startsWith("--data-dir="))?.split("=")[1]
@@ -193,6 +194,13 @@ function startOperationalMode(localConfig: LocalConfig, onStaleCreds: (reason: s
         console.log(`[forgetmenot] Bot name: ${bundle.settings.botName}`);
         console.log(`[forgetmenot] Safe mode: ${bundle.safeMode ? "ON" : "off"}`);
         console.log(`[forgetmenot] AI: ${bundle.settings.aiProvider} (${bundle.settings.aiModel})`);
+        // Hide the console window after startup chatter has printed — the
+        // operator chose quiet-background mode in the toolkit. Runs once,
+        // on first successful bundle fetch. Windows only; no-op elsewhere.
+        if (!bundle.settings.showTerminal) {
+          console.log("[forgetmenot] Hiding console window (showTerminal=false).");
+          hideConsoleWindowIfRequested(false);
+        }
       } else {
         console.log(`[forgetmenot] Config refreshed. Safe mode: ${bundle.safeMode ? "ON" : "off"}`);
       }
