@@ -398,7 +398,7 @@ input:focus, select:focus { border-color: #3f3f46; }
     <label class="toggle"><input type="checkbox" id="toggleOptIn" checked><span class="slider"></span></label>
   </div>
   <div class="toggle-row">
-    <div><div class="toggle-label">Thinking allowed <span class="badge">TARS</span></div><div class="toggle-desc">On rare factual questions the bot doesn't know, it hands off to a reasoning model for that single reply. Slim — fires ~1-3% of replies.</div></div>
+    <div><div class="toggle-label">Thinking allowed</div><div class="toggle-desc">On rare factual questions the bot doesn't know, it hands off to a reasoning model for that single reply. Fires ~1-3% of replies. Expect a small bump in token usage when it triggers.</div></div>
     <label class="toggle"><input type="checkbox" id="toggleThinking"><span class="slider"></span></label>
   </div>
   <div class="nav">
@@ -675,7 +675,7 @@ function renderSummary() {
     '<dt>Autonomous replies</dt><dd>' + (wizState.autonomousRepliesEnabled ? 'On' : 'Off') + '</dd>' +
     '<dt>Fun moderation</dt><dd>' + (wizState.funModerationEnabled ? 'On' : 'Off') + '</dd>' +
     '<dt>Opt-in required</dt><dd>' + (wizState.optInRequired ? 'Yes' : 'No') + '</dd>' +
-    '<dt>Thinking allowed</dt><dd>' + (wizState.thinkingAllowed ? 'On (TARS mode)' : 'Off') + '</dd>' +
+    '<dt>Thinking allowed</dt><dd>' + (wizState.thinkingAllowed ? 'On' : 'Off') + '</dd>' +
     '<dt>Data directory</dt><dd style="font-size:11px;word-break:break-all">' + esc(wizState.dataDir) + '</dd>';
 }
 
