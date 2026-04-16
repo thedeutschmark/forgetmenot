@@ -103,7 +103,12 @@ export async function runFixture(
   // LAST is the most recent. SQL ORDER BY DESC then returns the last note
   // first. Without this, equal timestamps mean SQLite's DESC sort tiebreak
   // is undefined and budget-trim fixtures become flaky.
-  const noteSeedBase = new Date("2025-01-01T00:00:00Z").getTime();
+  //
+  // Base timestamp anchored 1 hour before `now` so fixtures remain within
+  // any reasonable staleDays retention window. (Earlier versions anchored
+  // at 2025-01-01 which became stale once a rolling stale filter landed
+  // in retrieval — gate caught that regression immediately.)
+  const noteSeedBase = Date.now() - 60 * 60 * 1000;
   let noteSeedSeq = 0;
   const nextNoteTimestamp = () =>
     new Date(noteSeedBase + noteSeedSeq++ * 1000).toISOString().replace("T", " ").slice(0, 19);
@@ -196,7 +201,7 @@ export async function runFixture(
       try {
         // Production retrieval + production prompt assembly. Same code path
         // the live runtime uses — what the eval measures IS what production does.
-        const context = buildReplyContext(msg.login, msg.twitchId);
+        const context = buildReplyContext(msg.login, msg.twitchId, 20, settings.memoryRetentionDays);
         const effectiveName = (settings.botName && settings.botName.trim()) || "the bot";
         const assembled = assemblePrompt(
           settings, policy, context, msg.login, msg.text, effectiveName,

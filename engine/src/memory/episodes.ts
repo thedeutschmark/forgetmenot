@@ -12,6 +12,7 @@
 
 import { getDb } from "../db/index.js";
 import { chatCompletion } from "../llm/adapter.js";
+import { getCurrentSessionId } from "./channel.js";
 import type { BotSettings } from "../runtime/config.js";
 
 const MIN_EVENTS_FOR_EPISODE = 25; // don't bother summarizing tiny windows
@@ -102,12 +103,16 @@ export async function writeEpisodes(
     // Detect rough topic from the summary (first sentence or phrase)
     const topic = summary.split(/[.!?\n]/)[0]?.trim().slice(0, 120) || null;
 
+    const sessionId = getCurrentSessionId();
     db.prepare(`
-      INSERT INTO episodes (started_at, ended_at, topic, participants_json, summary, source_event_count, status)
-      VALUES (?, ?, ?, ?, ?, ?, 'active')
-    `).run(startedAt, endedAt, topic, JSON.stringify(participants), summary, events.length);
+      INSERT INTO episodes (started_at, ended_at, topic, participants_json, summary, source_event_count, status, stream_session_id)
+      VALUES (?, ?, ?, ?, ?, ?, 'active', ?)
+    `).run(startedAt, endedAt, topic, JSON.stringify(participants), summary, events.length, sessionId);
 
-    console.log(`[episodes] Created episode: "${topic}" (${events.length} events, ${participants.length} participants)`);
+    if (sessionId != null) {
+      db.prepare("UPDATE stream_sessions SET episode_count = episode_count + 1 WHERE id = ?").run(sessionId);
+    }
+    console.log(`[episodes] Created episode: "${topic}" (${events.length} events, ${participants.length} participants, session=${sessionId ?? "none"})`);
     return 1;
   } catch (err) {
     console.error("[episodes] Summary failed:", err instanceof Error ? err.message : err);

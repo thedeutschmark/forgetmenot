@@ -25,11 +25,11 @@ import { setWizardContext } from "./api/wizard.js";
 import { startGateway, stopGateway } from "./gateway/twitch.js";
 import { initEngine, updateBundle } from "./reply/engine.js";
 import { setRuntimeContext } from "./actions/executor.js";
-import { startCompaction, updateCompactionBundle, stopCompaction } from "./memory/compaction.js";
+import { startCompaction, updateCompactionBundle, stopCompaction, flushCurrentSessionForShutdown } from "./memory/compaction.js";
 import type { TimeoutMode } from "./actions/helix.js";
 
 async function main() {
-  console.log("[forgetmenot] ForgetMeNot v0.1.23");
+  console.log("[forgetmenot] ForgetMeNot v0.1.25");
 
   // 1. Load local config (CLI override: --data-dir "path")
   const dataDirArg = process.argv.find((a) => a.startsWith("--data-dir="))?.split("=")[1]
@@ -107,9 +107,34 @@ async function main() {
 
   wireSetupEndpoints();
 
-  // 5. Graceful shutdown
-  const shutdown = () => {
+  // 5. Graceful shutdown — flush the current session recap before exit so
+  // "last stream" recall survives right-click-close / Ctrl+C / terminal close.
+  // Bounded at 10s: the LLM call can hang, and Windows only gives console
+  // apps ~5s after CTRL_CLOSE_EVENT regardless. Second signal forces exit.
+  const FLUSH_TIMEOUT_MS = 10_000;
+  let shuttingDown = false;
+  const shutdown = async () => {
+    if (shuttingDown) {
+      console.log("[forgetmenot] Second shutdown signal — forcing exit.");
+      process.exit(1);
+    }
+    shuttingDown = true;
     console.log("[forgetmenot] Shutting down...");
+
+    try {
+      await Promise.race([
+        flushCurrentSessionForShutdown(),
+        new Promise<void>((resolve) =>
+          setTimeout(() => {
+            console.warn(`[forgetmenot] Session flush timed out after ${FLUSH_TIMEOUT_MS / 1000}s — exiting without recap.`);
+            resolve();
+          }, FLUSH_TIMEOUT_MS),
+        ),
+      ]);
+    } catch (err) {
+      console.error("[forgetmenot] Session flush errored:", err instanceof Error ? err.message : err);
+    }
+
     if (cleanupOperational) cleanupOperational();
     server.close();
     closeDb();
@@ -117,6 +142,10 @@ async function main() {
   };
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
+  // Windows: CTRL_CLOSE_EVENT (console window close / right-click close on
+  // the terminal) → SIGHUP. Ctrl+Break → SIGBREAK.
+  process.on("SIGHUP", shutdown);
+  process.on("SIGBREAK", shutdown);
 
   // 6. Mode decision
   const hasCreds = Boolean(currentConfig.installationId && currentConfig.installationSecret);

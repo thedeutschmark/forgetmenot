@@ -123,8 +123,10 @@ export async function onChatMessage(
     return;
   }
 
-  // Build context
-  const context = buildReplyContext(login, twitchId);
+  // Build context — stale filter uses memoryRetentionDays from settings so
+  // notes that haven't been reconfirmed within the retention window drop
+  // out of the retrieval set.
+  const context = buildReplyContext(login, twitchId, 20, settings.memoryRetentionDays);
 
   // Build prompt (with token budget + prioritized drops)
   const { messages, metrics } = buildPrompt(settings, context, login, message);
