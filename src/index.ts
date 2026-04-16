@@ -29,7 +29,7 @@ import { startCompaction, updateCompactionBundle, stopCompaction, flushCurrentSe
 import type { TimeoutMode } from "./actions/helix.js";
 
 async function main() {
-  console.log("[forgetmenot] ForgetMeNot v0.1.27");
+  console.log("[forgetmenot] ForgetMeNot v0.1.28");
 
   // 1. Load local config (CLI override: --data-dir "path")
   const dataDirArg = process.argv.find((a) => a.startsWith("--data-dir="))?.split("=")[1]
