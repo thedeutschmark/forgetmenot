@@ -13,7 +13,7 @@
 
 import { writeEpisodes } from "./episodes.js";
 import { extractNotes } from "./notes.js";
-import { syncChannelState } from "./channel.js";
+import { syncChannelState, restoreSessionState } from "./channel.js";
 import { getDb } from "../db/index.js";
 import type { RuntimeBundle } from "../runtime/config.js";
 
@@ -35,6 +35,9 @@ export function startCompaction(
   clientId = twitchClientId;
 
   if (timer) clearInterval(timer);
+
+  // Restore session state in case the bot restarted mid-stream
+  restoreSessionState();
 
   // Run immediately on start
   void runCompaction();
@@ -87,6 +90,7 @@ async function runCompaction(): Promise<void> {
         currentBundle.broadcasterTwitchId,
         currentBundle.botAccount.accessToken,
         clientId,
+        { provider: settings.aiProvider, model: settings.aiModel, apiKey },
       );
     } catch (err) {
       console.error("[compaction] Channel sync failed:", err instanceof Error ? err.message : err);

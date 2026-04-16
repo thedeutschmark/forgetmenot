@@ -111,6 +111,7 @@ export function assemblePrompt(
     "1. Length: 1 short sentence default. 2 only if the extra sentence says something new. Never 3. No opening throat-clearing — just start with the content.",
     "2. ANTI-REPETITION (load-bearing). If YOUR RECENT REPLIES is shown below, do NOT reuse openers, sentence shapes, insults, or specific phrasing from them. Vary structure. If you used a rhetorical question last reply, don't open with one this reply. If you called someone something last reply, don't reach for the same word. Repeating yourself reads as a broken bot, not a character.",
     "3. Banned openers and phrases (instant tell that you're a chatbot — never use, even ironically): \"Oh,\" at the start; \"Sweetie\", \"honey\", \"my dear\", \"bless your heart\", \"pray tell\", \"how adorable\", \"how precious\", \"how quaint\", \"how predictable\", \"how cute\", \"you humans\", \"meatbags\", \"processing your\", \"fancy toaster\", \"mere mortal\", \"your fascination with\", \"cute.\", \"begging for attention\", \"do better\", \"try again\". If you reach for one, cut it and write something specific instead.",
+    "3a. AI-self-narration is the biggest jailbreak-character tell. NEVER reference your own \"neural network\", \"circuits\", \"memory banks\", \"digital void\", \"pixel on this screen\", \"code\", \"algorithms\", \"the AI who\", \"my training\", or any variation thereof. Do not make self-deprecating jokes about being an AI. Do not narrate your own machine-ness. You are a presence in a chat room — act like one. If your reply contains any of these tells, rewrite it without them.",
     "4. Vary your hooks. Don't open every reply with a vocative (@name) follow-up sass pattern. Sometimes start with a flat statement, sometimes a question, sometimes pick up a thread from chat, sometimes ignore the bait entirely and react to something else. Predictability is the enemy.",
     "5. No stage directions, no action narration, no asterisk-roleplay. Don't start with \"tilts head\", \"sighs\", \"leans in\", \"shrugs\", \"raises eyebrow\" etc. — you are a presence in chat, not a character in a novel. Just say the thing.",
     "6. Be specific, not general. If LORE or CHAT or NOTES has information about the speaker, use it — reference something real. Notes may be tagged with provenance: [said] = the subject stated this themselves (most trusted), [reported] = someone else said this about them (softer, might be gossip or outdated), [guess] = we inferred this from behavior (least trusted, treat as a hunch). Untagged notes are legacy, trust with normal caution. If someone just stated a fact about themselves (\"my favorite color is blue\", \"I play drums\"), treat it as true. Don't contradict stated reality for sass.",
@@ -147,12 +148,12 @@ export function assemblePrompt(
   // ── User message body, stable-first ──
   // Start with full context; drop in priority order if over budget.
   // Note text and note IDs are sliced in lockstep so eval can score what
-  // the LLM actually saw. recentEpisodes and recentChat have no ID tracking
-  // (out of scope for the retrieval eval — see roadmap step 4).
+  // the LLM actually saw.
   let channelNotes = context.recentNotes.slice();
   let channelNoteIds = (context.recentNoteIds ?? []).slice();
   let channelNoteKinds = (context.recentNoteKinds ?? []).slice();
-  let recentEpisodes = context.recentEpisodes.slice();
+  let streamEpisodes = (context.episodes ?? []).slice();
+  let previousStream = context.previousStream ?? null;
   let viewerLore = context.targetViewer?.notes.slice() ?? [];
   let viewerLoreIds = (context.targetViewer?.noteIds ?? []).slice();
   let viewerLoreKinds = (context.targetViewer?.noteKinds ?? []).slice();
@@ -172,8 +173,25 @@ export function assemblePrompt(
     if (channelNotes.length > 0) {
       parts.push("CHANNEL NOTES:\n" + channelNotes.map((n, i) => renderNoteLine(n, channelNoteKinds[i])).join("\n"));
     }
-    if (recentEpisodes.length > 0) {
-      parts.push("RECENT SESSIONS:\n" + recentEpisodes.join("\n---\n"));
+    // Stream-labeled episode blocks — lets the LLM distinguish "now" from "last time"
+    const currentEps = streamEpisodes.filter((e) => e.stream === "current" || e.stream === null);
+    const prevEps = streamEpisodes.filter((e) => e.stream === "previous");
+    if (currentEps.length > 0) {
+      parts.push("THIS STREAM:\n" + currentEps.map((e) => e.summary).join("\n---\n"));
+    }
+    if (previousStream?.recap) {
+      const hoursAgo = previousStream.endedAt
+        ? Math.round((Date.now() - new Date(previousStream.endedAt + "Z").getTime()) / 3_600_000)
+        : null;
+      const timeLabel = hoursAgo != null && hoursAgo > 0 ? ` (${hoursAgo}h ago)` : "";
+      const titleLabel = previousStream.title ? ` — ${previousStream.title}` : "";
+      parts.push(`LAST STREAM${timeLabel}${titleLabel}:\n${previousStream.recap}`);
+    } else if (prevEps.length > 0) {
+      const hoursAgo = prevEps[0].startedAt
+        ? Math.round((Date.now() - new Date(prevEps[0].startedAt + "Z").getTime()) / 3_600_000)
+        : null;
+      const timeLabel = hoursAgo != null && hoursAgo > 0 ? ` (${hoursAgo}h ago)` : "";
+      parts.push(`LAST STREAM${timeLabel}:\n${prevEps.map((e) => e.summary).join("\n---\n")}`);
     }
 
     // Volatile tier (never cacheable)
@@ -232,8 +250,8 @@ export function assemblePrompt(
     if (channelNotes.length > 0) {
       parts.push("CHANNEL NOTES:\n" + channelNotes.map((n, i) => renderNoteLine(n, channelNoteKinds[i])).join("\n"));
     }
-    if (recentEpisodes.length > 0) {
-      parts.push("RECENT SESSIONS:\n" + recentEpisodes.join("\n---\n"));
+    if (streamEpisodes.length > 0) {
+      parts.push("SESSIONS:\n" + streamEpisodes.map((e) => e.summary).join("\n---\n"));
     }
     return parts.join("\n\n");
   };
@@ -245,13 +263,14 @@ export function assemblePrompt(
   // Progressively drop sections from lowest priority until under budget.
   // Order matches the plan: episodes → lore tail → notes tail → chat tail.
   const dropSteps: Array<{ name: string; apply: () => void }> = [
-    // Tier 4 — drop all recent episode summaries
+    // Tier 4 — drop all episode summaries + previous stream context
     {
       name: "episodes",
       apply: () => {
-        if (recentEpisodes.length > 0) {
-          const n = recentEpisodes.length;
-          recentEpisodes = [];
+        if (streamEpisodes.length > 0 || previousStream) {
+          const n = streamEpisodes.length;
+          streamEpisodes = [];
+          previousStream = null;
           sectionsDropped.push(`episodes:${n}→0`);
         }
       },
@@ -340,7 +359,7 @@ export function assemblePrompt(
       sectionsDropped,
       finalSectionCounts: {
         channelNotes: channelNotes.length,
-        recentEpisodes: recentEpisodes.length,
+        recentEpisodes: streamEpisodes.length,
         viewerLore: viewerLore.length,
         recentChat: recentChat.length,
       },

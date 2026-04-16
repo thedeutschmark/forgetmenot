@@ -6,6 +6,7 @@
  */
 
 import { getDb } from "../db/index.js";
+import { getCurrentSessionId } from "./channel.js";
 import type { SourceKind } from "./notes.js";
 
 export interface ViewerContext {
@@ -32,12 +33,31 @@ export interface ViewerContext {
   recentOwnMessages: string[];
 }
 
+export interface EpisodeEntry {
+  summary: string;
+  startedAt: string;
+  /** Which stream this episode belongs to: "current", "previous", or null (legacy/unknown). */
+  stream: "current" | "previous" | null;
+}
+
+/** Recap of the previous stream session, if one exists. */
+export interface PreviousStreamContext {
+  recap: string | null;
+  title: string | null;
+  category: string | null;
+  endedAt: string;
+}
+
 export interface ReplyContext {
   recentMessages: Array<{ login: string; text: string; at: string }>;
   targetViewer: ViewerContext | null;
   channelTitle: string | null;
   channelCategory: string | null;
   recentEpisodes: string[];
+  /** Structured episodes with stream session context. Budget/prompt uses
+   *  this for labeled rendering; recentEpisodes kept for backwards compat. */
+  episodes: EpisodeEntry[];
+  previousStream: PreviousStreamContext | null;
   recentNotes: string[];
   /** Parallel array — channel note row IDs in the same order as `recentNotes`. */
   recentNoteIds: number[];
@@ -149,15 +169,75 @@ export function buildReplyContext(
     .prepare("SELECT stream_title, stream_category FROM channel_state LIMIT 1")
     .get() as { stream_title: string | null; stream_category: string | null } | undefined;
 
-  // Recent episodes (mid-term memory)
-  const episodes = db
-    .prepare(`
-      SELECT summary FROM episodes
-      WHERE status = 'active' AND summary IS NOT NULL
-      ORDER BY started_at DESC
-      LIMIT 3
-    `)
-    .all() as Array<{ summary: string }>;
+  // Recent episodes (mid-term memory) — session-aware retrieval.
+  // Pull up to 2 from the current stream session + 1 from the previous,
+  // so the LLM can distinguish "now" from "last time." Falls back to the
+  // old "last 3 by time" query when no session is active (legacy/unknown).
+  const activeSessionId = getCurrentSessionId();
+
+  const currentEpisodes = activeSessionId != null
+    ? db.prepare(`
+        SELECT summary, started_at FROM episodes
+        WHERE status = 'active' AND summary IS NOT NULL AND stream_session_id = ?
+        ORDER BY started_at DESC LIMIT 2
+      `).all(activeSessionId) as Array<{ summary: string; started_at: string }>
+    : db.prepare(`
+        SELECT summary, started_at FROM episodes
+        WHERE status = 'active' AND summary IS NOT NULL
+        ORDER BY started_at DESC LIMIT 2
+      `).all() as Array<{ summary: string; started_at: string }>;
+
+  // Previous session: find the most recent closed session (not the current one)
+  const prevSession = (activeSessionId != null
+    ? db.prepare(`
+        SELECT id, recap, title, category, ended_at FROM stream_sessions
+        WHERE ended_at IS NOT NULL AND id != ?
+        ORDER BY ended_at DESC LIMIT 1
+      `).get(activeSessionId)
+    : db.prepare(`
+        SELECT id, recap, title, category, ended_at FROM stream_sessions
+        WHERE ended_at IS NOT NULL
+        ORDER BY ended_at DESC LIMIT 1
+      `).get()
+  ) as { id: number; recap: string | null; title: string | null; category: string | null; ended_at: string } | undefined;
+
+  // Grab 1 episode from the previous session for more detail
+  const prevEpisodes = prevSession
+    ? db.prepare(`
+        SELECT summary, started_at FROM episodes
+        WHERE status = 'active' AND summary IS NOT NULL AND stream_session_id = ?
+        ORDER BY started_at DESC LIMIT 1
+      `).all(prevSession.id) as Array<{ summary: string; started_at: string }>
+    : [];
+
+  // currentEpisodes is DESC from query — reverse to chronological for prompt
+  currentEpisodes.reverse();
+
+  // Build structured episodes list (chronological current, then previous)
+  const structuredEpisodes: EpisodeEntry[] = [
+    ...currentEpisodes.map((e) => ({
+      summary: e.summary,
+      startedAt: e.started_at,
+      stream: "current" as const,
+    })),
+    ...prevEpisodes.map((e) => ({
+      summary: e.summary,
+      startedAt: e.started_at,
+      stream: "previous" as const,
+    })),
+  ];
+
+  // Flat list for backwards compat (recentEpisodes)
+  const episodes = [...currentEpisodes, ...prevEpisodes];
+
+  const previousStream: PreviousStreamContext | null = prevSession
+    ? {
+        recap: prevSession.recap,
+        title: prevSession.title,
+        category: prevSession.category,
+        endedAt: prevSession.ended_at,
+      }
+    : null;
 
   // Channel-level semantic notes — same stale filter + same
   // confidence*recency blend as viewer notes.
@@ -198,6 +278,8 @@ export function buildReplyContext(
     channelTitle: channel?.stream_title ?? null,
     channelCategory: channel?.stream_category ?? null,
     recentEpisodes: episodes.map((e) => e.summary),
+    episodes: structuredEpisodes,
+    previousStream,
     recentNotes: channelNotes.map((n) => n.fact),
     recentNoteIds: channelNotes.map((n) => Number(n.id)),
     recentNoteKinds: channelNotes.map((n) => normalizeKind(n.source_kind)),
