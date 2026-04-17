@@ -106,6 +106,13 @@ export interface EvalFixture {
    * how much real lore we'd need to seed to hit the production budget.
    */
   maxInputTokens?: number;
+  /**
+   * Login of the broadcaster for this fixture. When set, the runner
+   * passes it to assemblePrompt so creator-gated behaviors (creatorFrame,
+   * commandOverride, rule 16 territory) get exercised when the matching
+   * login speaks. Without it those overrides never fire in eval mode.
+   */
+  broadcasterLogin?: string;
 }
 
 /**

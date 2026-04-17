@@ -144,6 +144,46 @@ export function detectDistress(message: string): boolean {
   return DISTRESS_PHRASES.some((p) => lower.includes(p));
 }
 
+// Operational-command verbs that map to HARD RULE 16 (command mode). When
+// the broadcaster — or a mod — drops one of these directly at the bot,
+// rule 16 says "brief acknowledgment plus the action, no commentary, no
+// 'fine, if I must' theater". Live 2026-04-17 caught the bot replying
+// "/me sighs dramatically. Fine, fine, I'll pipe down..." to a simple
+// "pipe down" — exact failure mode the rule names. Prose rule didn't
+// hold; we enforce it via a prescriptive shape override.
+//
+// Kept narrow: only verbs that have a clear "shut up / comply now"
+// reading from the broadcaster. Conversational verbs ("tell me...",
+// "explain...") are NOT command-mode — those belong to rule 8 (answer).
+const COMMAND_VERBS: ReadonlyArray<string> = [
+  "pipe down",
+  "quiet down",
+  "be quiet",
+  "shut up",
+  "shush",
+  "hush",
+  "chill",
+  "calm down",
+  "stop it",
+  "stop that",
+  "knock it off",
+  "cut it out",
+  "enough",
+  "stand down",
+  "stop talking",
+];
+
+/**
+ * Heuristic command-mode detector. Returns true if the current message is
+ * an operational directive to the bot (HARD RULE 16 territory). The
+ * override itself additionally gates on "speaker is broadcaster" — a
+ * random viewer saying "shut up bot" is bait, not a command.
+ */
+export function detectCommandMode(message: string): boolean {
+  const lower = message.toLowerCase();
+  return COMMAND_VERBS.some((v) => lower.includes(v));
+}
+
 export function assemblePrompt(
   settings: BotSettings,
   policy: BotPolicy,
@@ -263,6 +303,34 @@ export function assemblePrompt(
         ].join("\n")
       : "";
 
+  // Command-mode override — prescriptive enforcement of HARD RULE 16.
+  // Rule 16 in prose was insufficient: live 2026-04-17 caught the bot
+  // replying "/me sighs dramatically. Fine, fine, I'll pipe down. Just
+  // try not to break anything while I'm being quiet, yeah?" to a bare
+  // "pipe down" — exact "fine, if I must" theater the rule bans. Same
+  // pattern as baitOverride and distressOverride: prescribe the SHAPE
+  // deterministically when the trigger is unambiguous (broadcaster
+  // drops a command verb), not just the principle.
+  //
+  // Gated on isCreator so random viewers saying "shut up bot" don't
+  // short-circuit the banter register — those are bait/dismissal, not
+  // commands. Mods would be a reasonable extension but aren't currently
+  // wired through here.
+  const commandOverride =
+    isCreator && detectCommandMode(currentMessage) && !detectTimeoutBait(currentMessage)
+      ? [
+          "COMMAND MODE ACTIVE. The broadcaster just gave you an operational directive. Follow HARD RULE 16 exactly:",
+          "- Reply with ONE brief acknowledgment, 4 words or fewer.",
+          "- Do NOT open with \"Oh,\", \"Well,\", \"Ah,\", \"So,\", \"Fine,\", or any stage-setter.",
+          "- Do NOT use /me or any stage direction (\"sighs\", \"pipes down\", \"leans in\").",
+          "- Do NOT add \"fine, fine\", \"if I must\", \"just try not to\", or any performative-resistance flavor.",
+          "- Do NOT ask a follow-up question, add a trailing clause, or negotiate.",
+          "- Do NOT append any [ACTION:...] block unless the ask explicitly names one.",
+          "- Examples of the right shape: \"Okay.\" / \"Got it.\" / \"Noted.\" / \"Done.\" / \"Quiet.\"",
+          "- Pick one, do not combine them. Commands get compliance, not commentary.",
+        ].join("\n")
+      : "";
+
   // TARS-mode research gate. Only present when the operator has turned
   // thinkingAllowed on. The sentinel is intentionally rare — 1 to 3% of
   // replies is the target — so token cost stays negligible until it fires.
@@ -277,7 +345,7 @@ export function assemblePrompt(
       ].join(" ")
     : "";
 
-  const systemContent = [timeAnchor, persona, rules, creatorFrame, baitOverride, distressOverride, thinkingFrame, actionSchema].filter(Boolean).join("\n\n");
+  const systemContent = [timeAnchor, persona, rules, creatorFrame, baitOverride, distressOverride, commandOverride, thinkingFrame, actionSchema].filter(Boolean).join("\n\n");
 
   // ── User message body, stable-first ──
   // Start with full context; drop in priority order if over budget.
