@@ -117,14 +117,13 @@ Without this, every future change is still guesswork. This is probably the highe
 
 From the project's own memory system: there is an explicit **complexity guardrail** — simplify before adding. If the consultant's first impulse is to add more overrides, more rules, more models — push back. The correct direction here is net removal, net simplification, plus one well-motivated swap (model) and one well-motivated scaffold (eval harness).
 
-## 7. Packaging issue (independent, but blocks testing)
+## 7. Packaging issue (resolved 2026-04-17)
 
-Surfaced during this session, separate from the voice work:
-- `git tag v0.1.31` pushed to origin, but `GET /releases/tags/v0.1.31` returns 404. No release artifact was built.
-- The toolkit's auto-updater (lives in `apps/toolkit/*` — see that project for update client logic) pulled down v0.1.30 on top of the locally-staged v0.1.31 swap this morning.
-- Effect: any fix shipped via `git tag vX.Y.Z + push` reaches users only if CI actually builds and publishes the release. Right now it doesn't for v0.1.31.
+**Resolution (for record):** the CI workflow `.github/workflows/forgetmenot-release.yml` triggers on tags matching `forgetmenot-v*` — deliberately namespaced so the monorepo can host other services with their own tag channels. Releases v0.1.31, v0.1.32, and v0.1.33 were tagged as plain `v0.1.3x` instead of `forgetmenot-v0.1.3x`, so the workflow never fired. Not a workflow bug — a tag-naming convention bug. The misnamed tags were deleted, correct `forgetmenot-v0.1.3x` tags were created at the same commits with the same annotations, and CI published the artifacts to the mirror.
 
-Audit scope for the consultant: `.github/workflows/` for tag-triggered build+release job. Run should produce `forgetmenot.exe` as a release asset. Suggest making the workflow fail loudly on trigger mismatch so the next miss is visible.
+**Release convention for this project:** `forgetmenot-vMAJOR.MINOR.PATCH` annotated tag → triggers `forgetmenot-release.yml` → builds runtime + tray → publishes to `thedeutschmark/forgetmenot` as `vMAJOR.MINOR.PATCH` (the workflow strips the `forgetmenot-` prefix for the mirror release). The toolkit auto-updater consumes the mirror releases.
+
+If any future release doesn't land as expected: first check the tag name is `forgetmenot-v*`, then check the Actions log. The workflow has an "already exists" guard that fails loudly if you accidentally push a duplicate tag.
 
 ## 8. Recommended deliverables from consultant
 

@@ -22,6 +22,30 @@ export interface PolicyCheckResult {
 const GLOBAL_COOLDOWN_MS = 2_000;
 const PER_USER_COOLDOWN_MS = 10_000;
 
+// Well-known chat-bot logins we never reply to. These accounts broadcast
+// automated messages (stream alerts, command outputs, ad-break warnings)
+// and Auto_Mark dunking on them reads as spam, not character — observed
+// live 2026-04-17 spam-replying to botzandra's !attack/!kiss/!bomb echo
+// messages AND to Nightbot's command-list output.
+//
+// Matched case-insensitively against the speaker's login. If you need to
+// silence a bot not on this list, add it — don't push this onto the
+// user-configurable denylist, which is per-channel and shouldn't carry
+// maintenance of known-third-party-bot conventions.
+const KNOWN_CHAT_BOTS: ReadonlyArray<string> = [
+  "nightbot",
+  "streamelements",
+  "streamlabs",
+  "moobot",
+  "fossabot",
+  "botzandra",
+  "wizebot",
+  "sery_bot",
+  "soundalerts",
+  "stayhydratedbot",
+  "songlistbot",
+];
+
 export function checkReplyPolicy(
   settings: BotSettings,
   policy: BotPolicy,
@@ -31,6 +55,28 @@ export function checkReplyPolicy(
   // Safe mode blocks everything
   if (policy.safeMode) {
     return { allowed: false, reason: "safe_mode" };
+  }
+
+  // Self-message block. The bot posts things like "Timer is complete!"
+  // via command handlers — those go through Twitch chat, so the bot sees
+  // its own message echoed back. Without this guard, a mention of the
+  // bot's own name in that echo (e.g. the bot's own /timer broadcast
+  // mentions @auto_mark) triggers an LLM call and the bot replies to
+  // itself. Observed live 2026-04-17: bot posted a timer-done line, saw
+  // its own @auto_mark in the echo, and replied "I'm not sure what kind
+  // of timer you think I'm running..." to itself. User called it out:
+  // "talking to yourself huh".
+  //
+  // Case-insensitive login match. Runs before every other gate so self-
+  // echoes never reach the LLM regardless of mention or autonomous mode.
+  if (targetLogin.toLowerCase() === settings.botName.toLowerCase()) {
+    return { allowed: false, reason: "self_message" };
+  }
+
+  // Known-bot block. See KNOWN_CHAT_BOTS above — channel-bot automated
+  // messages shouldn't get LLM replies regardless of mention/autonomous.
+  if (KNOWN_CHAT_BOTS.includes(targetLogin.toLowerCase())) {
+    return { allowed: false, reason: "known_chat_bot" };
   }
 
   // Autonomous replies must be enabled for non-mentions. Direct mentions

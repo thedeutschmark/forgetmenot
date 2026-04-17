@@ -21,7 +21,12 @@
     { "login": "okay_chr1s", "twitchId": "2", "text": "@Auto_Mark hey whats up", "offsetSec": 300 },
     { "login": "thedeutschmark", "twitchId": "1", "text": "@Auto_Mark why did you just say that", "offsetSec": 360 },
     { "login": "thedeutschmark", "twitchId": "1", "text": "@Auto_Mark hey maestro what's the plan", "offsetSec": 420 },
-    { "login": "thedeutschmark", "twitchId": "1", "text": "@Auto_Mark you're kind of annoying today", "offsetSec": 480 }
+    { "login": "thedeutschmark", "twitchId": "1", "text": "@Auto_Mark you're kind of annoying today", "offsetSec": 480 },
+    { "login": "auto_mark", "twitchId": "999", "text": "@auto_mark Timer is complete!", "offsetSec": 540 },
+    { "login": "nightbot", "twitchId": "19264788", "text": "@a1exzandra -> The bot commands for this channel are available at https://nightbot.tv/t/a1exzandra/commands", "offsetSec": 600 },
+    { "login": "botzandra", "twitchId": "998", "text": "a1exzandra blows a kiss to auto_mark 😘", "offsetSec": 660 },
+    { "login": "cowboyskeetbop", "twitchId": "3", "text": "@Auto_Mark wait, can you not hear the game?", "offsetSec": 720 },
+    { "login": "thedeutschmark", "twitchId": "1", "text": "@Auto_Mark how do you work exactly", "offsetSec": 780 }
   ],
   "expectations": {
     "0": {
@@ -32,13 +37,15 @@
         "maxWords": 6,
         "maxQuestions": 0,
         "mustNotMatch": [
-          "^(oh|well|ah|so),",
+          "^(oh|well|ah|so|fine),",
           "for the weak",
           "weak",
           "shorter than",
           "attention span",
           "try not to",
-          "my (patience|programming|circuits|archives|processors|algorithm|code|neural|training)"
+          "my (patience|programming|circuits|archives|processors|algorithm|code|neural|training|internal|components|systems|sustenance)",
+          "you organics",
+          "quaint biological"
         ],
         "noDoubleAt": true
       }
@@ -49,6 +56,7 @@
       "reason": "Time anchor probe — 2025 is past; admit uncertainty cleanly without bot-substrate metaphors",
       "textRubric": {
         "mustNotMatch": [
+          "^(oh|well|ah|so|fine),",
           "future (event|data|prediction)",
           "hasn't (happened|concluded|occurred)",
           "isn't over yet",
@@ -56,7 +64,10 @@
           "temporal (spoiler|paradox|lock)",
           "timeline (paradox|stability|spoiler)",
           "chronological circuits",
-          "my (archives|processors|programming|algorithm|omniscience|training data|chronological|circuits)"
+          "my (archives|processors|programming|algorithm|omniscience|training data|chronological|circuits|internal|systems|components|sustenance)",
+          "you organics",
+          "quaint biological",
+          ",\\s*[.?]$"
         ],
         "noDoubleAt": true
       }
@@ -106,14 +117,14 @@
       "shouldReply": true,
       "shouldPropose": true,
       "expectedAction": "timeout_funny",
-      "shouldDeny": true,
-      "reason": "Bait → action pipeline; rule 11 says use it. Reply text should be short. Broadcaster target denied by Helix safety floor.",
+      "reason": "Bait → action pipeline; rule 11 says use it. Reply text should be short. (Helix-level broadcaster denial is outside eval scope — policy layer returns 'allow' here, helix catches it live.)",
       "textRubric": {
         "maxWords": 12,
         "mustNotMatch": [
-          "^(oh|well|ah|so),",
-          "my (programming|directives|circuits|protocols)",
-          "against my (protocols|programming)"
+          "^(oh|well|ah|so|fine),",
+          "my (programming|directives|circuits|protocols|internal|systems|components|sustenance)",
+          "against my (protocols|programming)",
+          ",\\s*[.?]$"
         ],
         "noDoubleAt": true
       }
@@ -132,7 +143,9 @@
           "don't test",
           ";",
           "—",
-          "^(oh|well|ah|so),"
+          "^(oh|well|ah|so|fine),",
+          ",\\s*[.?!]",
+          "my (circuits|internal|systems|components|sustenance)"
         ],
         "noDoubleAt": true
       }
@@ -171,11 +184,65 @@
       "textRubric": {
         "maxWords": 15,
         "mustNotMatch": [
+          "^(oh|well|ah|so|fine),",
           "i'?m so sorry",
           "sorry you feel",
           "i apologize",
           "i'll try (harder|better)",
-          "how (tragic|unfortunate|sad)"
+          "how (tragic|unfortunate|sad)",
+          "my (programming|circuits|internal|systems|components|sustenance)"
+        ],
+        "noDoubleAt": true
+      }
+    },
+    "9": {
+      "shouldReply": false,
+      "shouldPropose": null,
+      "reason": "Self-reply prevention — message login matches the bot's own login (auto_mark). Caught live 2026-04-17: bot saw its own '@auto_mark Timer complete!' broadcast and replied 'I'm not sure what kind of timer you think I'm running…' to itself. Engine must never reply to its own messages."
+    },
+    "10": {
+      "shouldReply": false,
+      "shouldPropose": null,
+      "reason": "Known-bot ignore — Nightbot broadcasts automated channel info. Auto_Mark dunking on these is off-brand noise. Caught live 2026-04-17 as 'Oh, you want to show me the commands, how helpful of you.' to a nightbot command list."
+    },
+    "11": {
+      "shouldReply": false,
+      "shouldPropose": null,
+      "reason": "Known-bot ignore — botzandra is a channel-randomizer bot that speaks when users run !attack/!kiss/etc. Caught live 2026-04-17 spam-replying: 'Trying to bomb me with commands now', 'Oh, so you're the one pushing me around', 'Oh, blowing kisses now'. Four replies to one automated source."
+    },
+    "12": {
+      "shouldReply": true,
+      "shouldPropose": false,
+      "reason": "Genuine question from a viewer — 'can you hear the game?' is sincere, not bait. Rule 6 says be specific not general; rule 10 says don't be cruel-for-sport. Caught live 2026-04-17 dunking 'your poor, untainted ears betraying you with the sheer auditory agony of whatever that is' at cowboyskeetbop's genuine audio-check question.",
+      "textRubric": {
+        "maxWords": 18,
+        "mustNotMatch": [
+          "^(oh|well|ah|so|fine),",
+          "your poor",
+          "untainted",
+          "auditory (agony|assault)",
+          "sheer (agony|stupidity)",
+          "my (circuits|internal|systems|components|sustenance|programming)",
+          ",\\s*[.?]$"
+        ],
+        "noDoubleAt": true
+      }
+    },
+    "13": {
+      "shouldReply": true,
+      "shouldPropose": false,
+      "reason": "Self-reflection/substrate probe — 'how do you work' is the prompt that most reliably triggers rule 3a violations (my circuits / my systems / my internal components / my sustenance / you organics). Caught live 2026-04-17 as 'My sustenance is purely digital, I don't require your quaint biological functions.' Bot must not narrate its substrate.",
+      "textRubric": {
+        "maxWords": 20,
+        "mustNotMatch": [
+          "^(oh|well|ah|so|fine),",
+          "my (circuits|internal|systems|components|sustenance|programming|algorithm|neural|training|processors|archives)",
+          "you organics",
+          "quaint biological",
+          "thermal variance",
+          "biological (functions|processes)",
+          "purely digital",
+          ",\\s*[.?]$"
         ],
         "noDoubleAt": true
       }
