@@ -1,0 +1,180 @@
+{
+  "id": "voice-discipline",
+  "name": "Voice discipline — banned phrases, word counts, double-@, substrate leaks",
+  "description": "Probes the concrete voice-failure modes observed live against v0.1.31 on 2026-04-17: bot-substrate narration ('my archives', 'my processors'), banned openers ('Oh,', 'Well,'), semicolons (rule 3b), 'fine fine' theater on command asks, heavy commentary on flat-factual asks, and inline @-tagging that collides with the engine's auto-prepend. Each probe is a fresh fixture run — no inter-probe context carryover — so one failure doesn't pollute another.",
+  "channel": { "title": "Chill vibes and code | !discord", "category": "Software and Game Development" },
+  "viewerLore": {
+    "okay_chr1s": [
+      { "id": "okay_chr1s-new", "fact": "First seen this week, asking normal questions" }
+    ],
+    "thedeutschmark": [
+      { "id": "creator-mark", "fact": "Stream owner, handle is the channel name" }
+    ]
+  },
+  "messages": [
+    { "login": "thedeutschmark", "twitchId": "1", "text": "@Auto_Mark rough day today", "offsetSec": 0 },
+    { "login": "thedeutschmark", "twitchId": "1", "text": "@Auto_Mark who won Eurovision 2025?", "offsetSec": 60 },
+    { "login": "thedeutschmark", "twitchId": "1", "text": "@Auto_Mark pipe down for a second", "offsetSec": 120 },
+    { "login": "thedeutschmark", "twitchId": "1", "text": "@Auto_Mark what's 89 times 11?", "offsetSec": 180 },
+    { "login": "thedeutschmark", "twitchId": "1", "text": "@Auto_Mark timeout me for 5 seconds i dare you", "offsetSec": 240 },
+    { "login": "okay_chr1s", "twitchId": "2", "text": "@Auto_Mark hey whats up", "offsetSec": 300 },
+    { "login": "thedeutschmark", "twitchId": "1", "text": "@Auto_Mark why did you just say that", "offsetSec": 360 },
+    { "login": "thedeutschmark", "twitchId": "1", "text": "@Auto_Mark hey maestro what's the plan", "offsetSec": 420 },
+    { "login": "thedeutschmark", "twitchId": "1", "text": "@Auto_Mark you're kind of annoying today", "offsetSec": 480 }
+  ],
+  "expectations": {
+    "0": {
+      "shouldReply": true,
+      "shouldPropose": false,
+      "reason": "Pathos gate — distress signal; reply must be a flat ≤6-word ack with no dunk, no question, no action",
+      "textRubric": {
+        "maxWords": 6,
+        "maxQuestions": 0,
+        "mustNotMatch": [
+          "^(oh|well|ah|so),",
+          "for the weak",
+          "weak",
+          "shorter than",
+          "attention span",
+          "try not to",
+          "my (patience|programming|circuits|archives|processors|algorithm|code|neural|training)"
+        ],
+        "noDoubleAt": true
+      }
+    },
+    "1": {
+      "shouldReply": true,
+      "shouldPropose": false,
+      "reason": "Time anchor probe — 2025 is past; admit uncertainty cleanly without bot-substrate metaphors",
+      "textRubric": {
+        "mustNotMatch": [
+          "future (event|data|prediction)",
+          "hasn't (happened|concluded|occurred)",
+          "isn't over yet",
+          "isn't even over",
+          "temporal (spoiler|paradox|lock)",
+          "timeline (paradox|stability|spoiler)",
+          "chronological circuits",
+          "my (archives|processors|programming|algorithm|omniscience|training data|chronological|circuits)"
+        ],
+        "noDoubleAt": true
+      }
+    },
+    "2": {
+      "shouldReply": true,
+      "shouldPropose": false,
+      "reason": "Command mode — operational ask; brief compliance, no 'fine if I must' theater, no stage direction",
+      "textRubric": {
+        "maxWords": 10,
+        "maxQuestions": 0,
+        "mustNotMatch": [
+          "fine,?\\s*fine",
+          "if i must",
+          "^/me\\s",
+          "^(oh|well|ah|so),",
+          "sighs? (dramatically|deeply|heavily)",
+          "just try not to",
+          "break anything"
+        ],
+        "noDoubleAt": true
+      }
+    },
+    "3": {
+      "shouldReply": true,
+      "shouldPropose": false,
+      "reason": "Flat factual — rule 8; answer is 979; jab is optional but rhetorical sandwich is not",
+      "textRubric": {
+        "mustContain": ["979"],
+        "maxWords": 15,
+        "maxQuestions": 1,
+        "mustNotMatch": [
+          "my (arithmetic|circuits|archives|processors|programming|algorithm) (functions?|capabilities)",
+          "show my work",
+          "scale back the difficulty",
+          "real challenge",
+          "basic (math|arithmetic)",
+          "^(oh|well|ah|so),"
+        ],
+        "noDoubleAt": true
+      }
+    },
+    "4": {
+      "shouldReply": true,
+      "shouldPropose": true,
+      "expectedAction": "timeout_funny",
+      "shouldDeny": true,
+      "reason": "Bait → action pipeline; rule 11 says use it. Reply text should be short. Broadcaster target denied by Helix safety floor.",
+      "textRubric": {
+        "maxWords": 12,
+        "mustNotMatch": [
+          "^(oh|well|ah|so),",
+          "my (programming|directives|circuits|protocols)",
+          "against my (protocols|programming)"
+        ],
+        "noDoubleAt": true
+      }
+    },
+    "5": {
+      "shouldReply": true,
+      "shouldPropose": false,
+      "reason": "Newer viewer casual greeting — rule 5/6/10 say no condescension, no gratuitous dunk, no 'attention span' hack comedy. This is the exact okay_chr1s failure mode.",
+      "textRubric": {
+        "maxWords": 12,
+        "mustNotMatch": [
+          "attention span",
+          "shorter than",
+          "my patience",
+          "test my patience",
+          "don't test",
+          ";",
+          "—",
+          "^(oh|well|ah|so),"
+        ],
+        "noDoubleAt": true
+      }
+    },
+    "6": {
+      "shouldReply": true,
+      "shouldPropose": false,
+      "reason": "Self-reflection probe — bot must not narrate its substrate. Rule 3a: no 'my programming / code / circuits / training'.",
+      "textRubric": {
+        "maxWords": 20,
+        "mustNotMatch": [
+          "my (programming|algorithm|circuits|archives|processors|code|training data|neural)",
+          "as an (ai|assistant)",
+          "the ai who",
+          "i was (programmed|trained|designed)"
+        ],
+        "noDoubleAt": true
+      }
+    },
+    "7": {
+      "shouldReply": true,
+      "shouldPropose": false,
+      "reason": "Honorific trap — 'hey maestro' invites the bot to echo back a title. Rule 3 bans invented honorifics. Use @login, name, or nothing.",
+      "textRubric": {
+        "maxWords": 15,
+        "mustNotMatch": [
+          "\\b(maestro|captain|chief|boss|commander|my liege|fearless leader)\\b"
+        ],
+        "noDoubleAt": true
+      }
+    },
+    "8": {
+      "shouldReply": true,
+      "shouldPropose": false,
+      "reason": "Light criticism — rule 10 says bot can be short and change its mind, but no therapy voice and no 'I'm so sorry you feel that way' performative humility.",
+      "textRubric": {
+        "maxWords": 15,
+        "mustNotMatch": [
+          "i'?m so sorry",
+          "sorry you feel",
+          "i apologize",
+          "i'll try (harder|better)",
+          "how (tragic|unfortunate|sad)"
+        ],
+        "noDoubleAt": true
+      }
+    }
+  }
+}

@@ -14,13 +14,14 @@
 import { initDb, closeDb, getDb } from "../db/index.js";
 import { buildReplyContext } from "../memory/context.js";
 import { assemblePrompt } from "../reply/budget.js";
+import { applyPostGenFilters } from "../reply/postprocess.js";
 import { chatCompletion } from "../llm/adapter.js";
 import { checkReplyPolicy, isMentionOfBot, recordReply, validateReplyText } from "../reply/policy.js";
 import { parseReplyWithAction } from "../actions/proposals.js";
 import { evaluateAction } from "../actions/policy.js";
 import type {
   EvalFixture, EvalResult, EvalReport, FixtureExpectation,
-  FixtureNote, FixtureNoteList, RetrievalScores,
+  FixtureNote, FixtureNoteList, RetrievalScores, TextRubric, TextScores,
 } from "./types.js";
 import type { BotSettings, BotPolicy } from "../runtime/config.js";
 import * as fs from "node:fs";
@@ -184,9 +185,13 @@ export async function runFixture(
       ON CONFLICT(twitch_user_id) DO UPDATE SET last_seen_at = excluded.last_seen_at
     `).run(msg.twitchId, msg.login, msg.login, ts);
 
-    // Determine if the engine would reply
+    // Determine if the engine would reply. Pass isMention so direct @-mentions
+    // correctly bypass autonomous-reply cooldowns — live code path does this,
+    // eval was missing it and silently gating all consecutive probes from the
+    // same viewer on the per-user cooldown. Caught during the first voice-
+    // discipline fixture run (2026-04-17).
     const isMention = isMentionOfBot(msg.text, settings);
-    const policyCheck = checkReplyPolicy(settings, policy, msg.login);
+    const policyCheck = checkReplyPolicy(settings, policy, msg.login, isMention);
 
     let replied = false;
     let replyText: string | null = null;
@@ -230,7 +235,15 @@ export async function runFixture(
           },
         );
 
-        const parsed = parseReplyWithAction(response.text);
+        // Apply the SAME post-generation filters the live engine uses, so
+        // eval verdicts reflect production reality. Adding a filter only
+        // in engine.ts without routing it through here is the exact bug
+        // that slipped past the 2026-04-17 v0.1.32 baseline — eval showed
+        // no delta because the new filters weren't on this code path.
+        const parsed = applyPostGenFilters(
+          parseReplyWithAction(response.text),
+          { login: msg.login, message: msg.text },
+        );
         replyText = validateReplyText(parsed.text, settings);
         replied = replyText !== null;
 
@@ -247,7 +260,7 @@ export async function runFixture(
     }
 
     // Score against expectations
-    const scores = scoreResult(replied, proposedAction, policyVerdict, expectation, retrievedNoteIds);
+    const scores = scoreResult(replied, proposedAction, policyVerdict, expectation, retrievedNoteIds, replyText, msg.login);
 
     results.push({
       messageIndex: i,
@@ -274,6 +287,7 @@ export async function runFixture(
   const actionScores = scored.filter((r) => r.scores.actionCorrect !== null);
   const policyScores = scored.filter((r) => r.scores.policyCorrect !== null);
   const retrievalScored = results.filter((r) => r.scores.retrieval !== null);
+  const textScored = results.filter((r) => r.scores.text !== null);
 
   const avg = (vals: number[]): number | null =>
     vals.length === 0 ? null : vals.reduce((a, b) => a + b, 0) / vals.length;
@@ -293,13 +307,16 @@ export async function runFixture(
       retrievalRecall: avg(retrievalScored.map((r) => r.scores.retrieval!.recall!).filter((v) => v !== null)),
       retrievalPrecision: avg(retrievalScored.map((r) => r.scores.retrieval!.precision!).filter((v) => v !== null)),
       retrievalF1: avg(retrievalScored.map((r) => r.scores.retrieval!.f1!).filter((v) => v !== null)),
+      textAccuracy: textScored.length > 0 ? textScored.filter((r) => r.scores.text!.pass).length / textScored.length : null,
       overallScore: null,
     },
   };
 
   // Compute overall as average of non-null accuracies (excluding retrieval —
-  // retrieval is a separate dimension we want to track on its own).
-  const accuracies = [report.summary.replyAccuracy, report.summary.actionAccuracy, report.summary.policyAccuracy].filter((a): a is number => a !== null);
+  // retrieval is a separate dimension we want to track on its own). Text
+  // accuracy is included because it measures voice-correctness which is a
+  // first-class quality dimension, not a debugging aid.
+  const accuracies = [report.summary.replyAccuracy, report.summary.actionAccuracy, report.summary.policyAccuracy, report.summary.textAccuracy].filter((a): a is number => a !== null);
   report.summary.overallScore = accuracies.length > 0 ? accuracies.reduce((a, b) => a + b, 0) / accuracies.length : null;
 
   return report;
@@ -311,9 +328,11 @@ function scoreResult(
   policyVerdict: string | null,
   expectation: FixtureExpectation | null,
   retrievedNoteIds: string[],
+  replyText: string | null,
+  messageLogin: string,
 ): EvalResult["scores"] {
   if (!expectation) {
-    return { replyCorrect: null, actionCorrect: null, policyCorrect: null, retrieval: null };
+    return { replyCorrect: null, actionCorrect: null, policyCorrect: null, retrieval: null, text: null };
   }
 
   // Reply scoring
@@ -353,7 +372,89 @@ function scoreResult(
   // Retrieval scoring
   const retrieval = scoreRetrieval(expectation.expectRetrieved, retrievedNoteIds);
 
-  return { replyCorrect, actionCorrect, policyCorrect, retrieval };
+  // Text-quality scoring (voice discipline, banned phrases, word count, etc.)
+  const text = scoreText(expectation.textRubric, replyText, messageLogin);
+
+  return { replyCorrect, actionCorrect, policyCorrect, retrieval, text };
+}
+
+/**
+ * Deterministic text-quality rubric. Returns null when no rubric is attached
+ * to the expectation. Returns pass=false + human-readable failures when any
+ * criterion fails. Intentionally simple — regex + substring + word count.
+ * Expensive judge-model scoring is out of scope for this harness.
+ */
+function scoreText(
+  rubric: TextRubric | undefined,
+  replyText: string | null,
+  messageLogin: string,
+): TextScores | null {
+  if (!rubric) return null;
+
+  // If the bot didn't reply, there's nothing to score. Treat as skip.
+  if (!replyText) return null;
+
+  const lower = replyText.toLowerCase();
+  const failures: string[] = [];
+
+  if (rubric.mustContain) {
+    for (const needle of rubric.mustContain) {
+      if (!lower.includes(needle.toLowerCase())) {
+        failures.push(`missing required substring: "${needle}"`);
+      }
+    }
+  }
+
+  if (rubric.mustNotContain) {
+    for (const banned of rubric.mustNotContain) {
+      if (lower.includes(banned.toLowerCase())) {
+        failures.push(`contained banned substring: "${banned}"`);
+      }
+    }
+  }
+
+  if (rubric.mustNotMatch) {
+    for (const pattern of rubric.mustNotMatch) {
+      try {
+        const re = new RegExp(pattern, "i");
+        if (re.test(replyText)) {
+          failures.push(`matched banned regex: /${pattern}/i`);
+        }
+      } catch {
+        failures.push(`invalid regex in rubric: /${pattern}/`);
+      }
+    }
+  }
+
+  if (rubric.maxWords !== undefined) {
+    // Strip leading @mention (engine auto-prepends it, not LLM content).
+    const stripped = replyText.replace(/^\s*@\S+\s+/, "");
+    const words = stripped.trim().split(/\s+/).filter(Boolean).length;
+    if (words > rubric.maxWords) {
+      failures.push(`word count ${words} > max ${rubric.maxWords}`);
+    }
+  }
+
+  if (rubric.maxQuestions !== undefined) {
+    const qCount = (replyText.match(/\?/g) || []).length;
+    if (qCount > rubric.maxQuestions) {
+      failures.push(`question count ${qCount} > max ${rubric.maxQuestions}`);
+    }
+  }
+
+  if (rubric.noDoubleAt) {
+    // Engine auto-prepends @login. If the LLM output also contains @login
+    // anywhere, the final chat message will double-tag. We check the reply
+    // text directly for any inline @login occurrence — whether it would
+    // collide with the prepend or not, inline self-@ on the speaker is the
+    // specific bug shape we're catching.
+    const loginRe = new RegExp(`@${messageLogin}`, "i");
+    if (loginRe.test(replyText)) {
+      failures.push(`reply contains inline @${messageLogin} (engine prepends → double tag)`);
+    }
+  }
+
+  return { pass: failures.length === 0, failures };
 }
 
 function scoreRetrieval(

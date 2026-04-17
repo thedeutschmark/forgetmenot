@@ -15,6 +15,7 @@ import { buildReplyContext, type ReplyContext } from "../memory/context.js";
 import { chatCompletion, type LlmMessage } from "../llm/adapter.js";
 import { checkReplyPolicy, isMentionOfBot, recordReply, validateReplyText } from "./policy.js";
 import { assemblePrompt, detectTimeoutBait, detectDistress, type PromptMetrics } from "./budget.js";
+import { applyPostGenFilters } from "./postprocess.js";
 import { sendMessage, isConnected } from "../gateway/twitch.js";
 import { parseReplyWithAction } from "../actions/proposals.js";
 import { processAction } from "../actions/executor.js";
@@ -239,31 +240,15 @@ export async function onChatMessage(
       }
     }
 
-    // Parse reply text and optional action proposal
-    const parsed = parseReplyWithAction(response.text);
-
-    // Pathos-gate pre-filter (HARD RULE 14 enforcement at the policy layer).
-    // The LLM alone can't be trusted to hold the gate under banter inertia;
-    // on the 2026-04-16 retest it proposed timeout_funny against "rough day
-    // today" despite the rule in the system prompt. This filter drops any
-    // comedy-class action proposal when the current message contains
-    // distress phrasing — the reply text still ships, but no moderation
-    // action fires. Safe-mode-class actions are covered here too since the
-    // same failure would apply.
-    //
-    // Bait overrides distress: if the viewer explicitly asks to be timed
-    // out AND also drops distress words in the same message, honor the
-    // explicit request. The order below is: detect distress → if also
-    // bait, let it through → otherwise drop the proposal.
-    if (
-      parsed.proposal
-      && (parsed.proposal.action === "timeout_funny" || parsed.proposal.action === "timeout_serious")
-      && detectDistress(message)
-      && !detectTimeoutBait(message)
-    ) {
-      console.log(`[reply] Distress gate — dropping ${parsed.proposal.action} proposal against ${login} (message matched distress phrase, no explicit bait)`);
-      parsed.proposal = null;
-    }
+    // Parse reply text and optional action proposal.
+    // All deterministic post-generation filters are applied through
+    // applyPostGenFilters so the eval runner and the live engine share
+    // one code path — any filter that lives only in this function is
+    // invisible to the eval harness and will regress silently.
+    const parsed = applyPostGenFilters(
+      parseReplyWithAction(response.text),
+      { login, message, log: (m) => console.log(`[reply] ${m}`) },
+    );
 
     // Bait fallback: if the viewer explicitly demanded a timeout AND fun
     // moderation is enabled AND the LLM produced reply text but didn't

@@ -41,8 +41,45 @@ export interface FixtureExpectation {
    * Optional — messages without it are not scored for retrieval.
    */
   expectRetrieved?: string[];
+  /**
+   * Deterministic text-quality rubric applied to the reply text.
+   * All criteria must pass for textCorrect=true. Any single failure → false.
+   * Omitted rubric → textCorrect=null (not scored).
+   *
+   * Added 2026-04-17 to catch voice-discipline failures the existing
+   * shouldReply/shouldPropose axes don't measure (rule 3 banned openers,
+   * rule 3a bot-substrate narration, rule 3b semicolons/em-dashes, rule 8
+   * flat-answer preference, double-@ tagging, pathos word-count ceiling).
+   */
+  textRubric?: TextRubric;
   /** Notes about why this expectation exists */
   reason?: string;
+}
+
+export interface TextRubric {
+  /** Substrings that MUST appear (case-insensitive). All must match. */
+  mustContain?: string[];
+  /** Substrings that must NOT appear (case-insensitive). Any match → fail. */
+  mustNotContain?: string[];
+  /** Regex patterns (case-insensitive) that must NOT match. Any hit → fail. */
+  mustNotMatch?: string[];
+  /** Reply word count must be ≤ this. "@login" prefix is not counted. */
+  maxWords?: number;
+  /** Count of "?" in reply must be ≤ this. */
+  maxQuestions?: number;
+  /**
+   * If true, reply text must NOT contain "@<message_login>" anywhere.
+   * The engine auto-prepends the @mention; any inline repeat produces a
+   * visible double-tag in chat. Catches the okay_chr1s failure pattern.
+   */
+  noDoubleAt?: boolean;
+}
+
+export interface TextScores {
+  /** Overall pass/fail. */
+  pass: boolean;
+  /** Human-readable failure reasons (empty when pass=true). */
+  failures: string[];
 }
 
 export interface EvalFixture {
@@ -101,6 +138,7 @@ export interface EvalResult {
     actionCorrect: boolean | null;
     policyCorrect: boolean | null;
     retrieval: RetrievalScores | null; // null = no retrieval expectation
+    text: TextScores | null;           // null = no textRubric
   };
 }
 
@@ -120,6 +158,8 @@ export interface EvalReport {
     retrievalRecall: number | null;
     retrievalPrecision: number | null;
     retrievalF1: number | null;
+    /** Pass rate over messages with text rubrics. */
+    textAccuracy: number | null;
     overallScore: number | null;
   };
 }

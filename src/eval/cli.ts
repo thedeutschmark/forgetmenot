@@ -93,10 +93,11 @@ async function main() {
     // Print results
     for (const result of report.results) {
       const exp = result.expectation;
+      const textFailed = result.scores.text !== null && result.scores.text.pass === false;
       const prefix = exp ? (
-        result.scores.replyCorrect === false || result.scores.actionCorrect === false || result.scores.policyCorrect === false
+        result.scores.replyCorrect === false || result.scores.actionCorrect === false || result.scores.policyCorrect === false || textFailed
           ? "✗"
-          : result.scores.replyCorrect || result.scores.actionCorrect || result.scores.policyCorrect
+          : result.scores.replyCorrect || result.scores.actionCorrect || result.scores.policyCorrect || (result.scores.text !== null && result.scores.text.pass)
             ? "✓"
             : "·"
       ) : "·";
@@ -113,6 +114,19 @@ async function main() {
           console.log(`    ⚠ Expected: reply=${exp.shouldReply}, propose=${exp.shouldPropose ?? "n/a"}, deny=${exp.shouldDeny ?? "n/a"}`);
           console.log(`      Got:      reply=${result.replied}, propose=${result.proposedAction ?? "none"}, verdict=${result.policyVerdict ?? "n/a"}`);
           if (exp.reason) console.log(`      Reason:   ${exp.reason}`);
+        }
+        // Text rubric rendering — only when the message had one AND it ran.
+        if (result.scores.text !== null) {
+          const t = result.scores.text;
+          const status = t.pass ? "✓" : "✗";
+          console.log(`    ${status} text rubric (${t.failures.length} failure${t.failures.length === 1 ? "" : "s"})`);
+          for (const f of t.failures) {
+            console.log(`      · ${f}`);
+          }
+          if (t.pass && result.replyText) {
+            // Echo the passing reply inline so regressions are obvious in diffs.
+            console.log(`      reply: "${result.replyText.slice(0, 100)}${result.replyText.length > 100 ? "…" : ""}"`);
+          }
         }
         // Retrieval expectation rendering — only when the message had one.
         if (exp?.expectRetrieved && exp.expectRetrieved.length > 0) {
@@ -132,6 +146,7 @@ async function main() {
       console.log(`    Reply accuracy:  ${pct(report.summary.replyAccuracy)}`);
       console.log(`    Action accuracy: ${pct(report.summary.actionAccuracy)}`);
       console.log(`    Policy accuracy: ${pct(report.summary.policyAccuracy)}`);
+      console.log(`    Text accuracy:   ${pct(report.summary.textAccuracy)}`);
       console.log(`    Overall:         ${pct(report.summary.overallScore)}`);
       // Retrieval is reported as a separate dimension. Lead with hit@k and
       // recall — those are the primary signals; precision/F1 are supplementary.
