@@ -370,7 +370,7 @@ const URL_INSPECTION_CLAIM_REGEX = /(?:the|that|your) (?:link|url|page|site)\s+(
  * Word-boundary + case-sensitive enough to avoid false positives on
  * normal chat prose.
  */
-const PROMPT_LABEL_REGEX = /\[REPLY\]|\[log\]|YOUR RECENT REPLIES|\bMESSAGE FROM\b|CHANNEL NOTES:|\bRECENT FROM\b|\bCHAT:|\bSPEAKER:|\bLORE \(|\bSTREAM:|\bTHIS STREAM\b|\bLAST STREAM\b|\bUSER_QUERY\b/;
+const PROMPT_LABEL_REGEX = /\[REPLY\]|\[log\]|\[said\]|\[reported\]|\[guess\]|YOUR RECENT REPLIES|\bMESSAGE FROM\b|CHANNEL NOTES:|\bRECENT FROM\b|\bCHAT:|\bSPEAKER:|\bLORE \(|\bSTREAM:|\bTHIS STREAM\b|\bLAST STREAM\b|\bUSER_QUERY\b|PATHOS GATE ACTIVE|COMMAND MODE ACTIVE|BAIT DETECTED|MINIMAL INPUT|RESEARCH MODE|SELF-ANCHORING GUARD|FORCE-RESEARCH|CREATOR PRESENT|HARD RULES?:|\[GLaDOS.*?\]|\[HAL.*?\]|\[TARS.*?\]/i;
 
 /**
  * Insult-intensity detection regex. Rule 10 + the v0.1.34 live observation:
