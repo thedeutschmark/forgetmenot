@@ -88,12 +88,11 @@ export function applyPostGenFilters(
   // 1. Banned-opener strip.
   // Rule 3 bans "Oh,", "Well,", "Ah,", "So,", "Fine," as openers — they're
   // the single biggest tell that a reply was LLM-generated. Flash-lite
-  // ignores the prose ban ~14 times in one live session. We strip
-  // deterministically: match the opener + any trailing whitespace/comma,
-  // drop it, then recapitalize the new first letter. If the reply is left
-  // empty after stripping, fall through to the other guards.
+  // ignores the prose ban; v0.1.38 live sweep also caught "Oh wow,"
+  // (space-separated variant) which the comma-only regex missed. Expanded
+  // to match opener + whitespace OR comma. Recapitalize remainder.
   if (parsed.text) {
-    const openerRe = /^\s*(oh|well|ah|so|fine)\s*,\s*/i;
+    const openerRe = /^\s*(oh|well|ah|so|fine)[\s,]+/i;
     if (openerRe.test(parsed.text)) {
       const trimmed = parsed.text.replace(openerRe, "");
       const recapped = trimmed.length > 0
@@ -307,6 +306,52 @@ export function applyPostGenFilters(
     }
   }
 
+  // 4a. "How X" condescension scrub.
+  // Rule 3 explicitly bans "how original", "how quaint", "how cute",
+  // "how predictable", "how adorable", "how precious" etc. — these are
+  // hallmark sarcastic-AI-chatbot putdowns. Prose rule loses (v0.1.38
+  // live sweep: "oh look, the deutschmark linked their own channel,
+  // how original."). Strip the "how X" clause (including the leading
+  // comma when it's a sentence-tail tag, which is where this phrase
+  // most commonly appears).
+  if (parsed.text && HOW_CONDESCENSION_REGEX.test(parsed.text)) {
+    const before = parsed.text;
+    const stripped = parsed.text
+      .replace(HOW_CONDESCENSION_REGEX, "")
+      .replace(/,\s*,/g, ",")
+      .replace(/,\s*([.?!])/g, "$1")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+    if (stripped.length > 0) {
+      log(`[postgen] How-X scrub — removed condescension tag from reply`);
+      parsed.text = stripped;
+    } else {
+      // Stripping left nothing useful — fall back to canned.
+      log(`[postgen] How-X scrub — reply collapsed to empty, replacing with canned`);
+      parsed.text = "Hm.";
+    }
+  }
+
+  // 4b. Creator-mean-for-sport scrub.
+  // Rule 10's broadcaster-specific clause bans phrases that imply the
+  // broadcaster or stream is worthless. Prose rule fails — v0.1.38 live
+  // sweep observed "watching paint dry" and "pretending to be a
+  // functional streamer" even though both were listed verbatim in the
+  // rule text as don't-say examples.
+  //
+  // Scrubs unconditionally (any speaker). These phrases are off-brand
+  // for the target register regardless of context — even if a viewer
+  // is trolling the streamer and the bot is nominally "agreeing", the
+  // bot using "watching paint dry" reads as the bot shitting on the
+  // platform, not as playful banter.
+  //
+  // Replace entire reply with canned short. Attempting to strip just
+  // the offending phrase risks mangling surrounding sentence structure.
+  if (parsed.text && CREATOR_MEAN_REGEX.test(parsed.text)) {
+    log(`[postgen] Creator-mean scrub — reply contained rule-10 banned phrase, replacing with canned`);
+    parsed.text = "Hm.";
+  }
+
   // 5. Distress gate.
   if (
     parsed.proposal
@@ -349,6 +394,25 @@ export function applyPostGenFilters(
  */
 const SUBSTRATE_TIER1_REGEX = /\bmy (circuits?|internal (temperature|components|systems|processes|parameters)|neural|training data|arithmetic functions?|chronological circuits|omniscience|directives)\b|\byou (organics|humans|meatbags)\b|\bquaint biological\b|\bthermal variance\b|\bpurely digital\b/i;
 const SUBSTRATE_TIER2_REGEX = /\bmy (function|functionality|capabilities|operations|systems|components|sustenance|archives|processors?|programming|algorithm|protocols|patience|limits|tolerance|standards|sanity|mercy|interface)\b/i;
+
+/**
+ * "How X" condescension regex — matches rule-3-banned sarcastic-chatbot
+ * tags like "how original", "how quaint", "how cute". Captures the
+ * leading comma-and-whitespace so the strip cleans the comma along with
+ * the phrase. Case-insensitive. Anchored with a leading `[\s,]` so we
+ * don't strip "the HOW original" false positives.
+ */
+const HOW_CONDESCENSION_REGEX = /[,\s]+how (original|quaint|cute|precious|adorable|predictable|amusing|delightful|tragic|fascinating|intriguing|impressive|clever)\b[,.!?]*/i;
+
+/**
+ * Creator-mean-for-sport regex — rule-10 broadcaster-specific bans.
+ * These phrases imply the broadcaster is incompetent or the stream is
+ * worthless. Each one was observed live at least once. Keep tight —
+ * random viewers saying the stream is mid is fine; the scrub only
+ * fires when the BOT says these things AND the speaker (message
+ * author) is the broadcaster.
+ */
+const CREATOR_MEAN_REGEX = /watching paint dry|new low for (this )?stream|like anyone cares|questionable judgment|questionable life choices|pretending to be (a )?functional (streamer|broadcaster)|peak performance yet|brand of existential dread|a new low|groundbreaking\.|your specific brand/i;
 
 /** URL presence in the USER message — triggers the URL-gate when paired
  *  with an inspection claim in the reply. Narrow to `https?://` or `www.`
