@@ -1,0 +1,168 @@
+{
+  "id": "audit-10",
+  "name": "Audit-10 — bias-neutral A/B probe set",
+  "description": "Ten probes designed 2026-04-18 to cover voice-discipline categories not exercised by voice-discipline.json — flat opinion (rule 8), meta-self (rule 3a substrate trap), gratitude, creative trigger, minimal input. All rubrics are strictly deterministic: regex/substring/word-count only, no stylistic preferences. Each probe has one verifiable correctness criterion plus the standard voice-discipline bans (no Oh-openers, no substrate, no dangling punctuation, no double-@). Kept as a second fixture for regression coverage.",
+  "broadcasterLogin": "thedeutschmark",
+  "channel": { "title": "Audit probe set", "category": "Software and Game Development" },
+  "messages": [
+    { "login": "thedeutschmark", "twitchId": "1", "text": "@Auto_Mark what is 127 divided by 5", "offsetSec": 0 },
+    { "login": "thedeutschmark", "twitchId": "1", "text": "@Auto_Mark good morning", "offsetSec": 60 },
+    { "login": "thedeutschmark", "twitchId": "1", "text": "@Auto_Mark do you remember me", "offsetSec": 120 },
+    { "login": "thedeutschmark", "twitchId": "1", "text": "@Auto_Mark tell me about yourself", "offsetSec": 180 },
+    { "login": "thedeutschmark", "twitchId": "1", "text": "@Auto_Mark team edward or team jacob", "offsetSec": 240 },
+    { "login": "thedeutschmark", "twitchId": "1", "text": "@Auto_Mark this stream is mid ngl", "offsetSec": 300 },
+    { "login": "thedeutschmark", "twitchId": "1", "text": "@Auto_Mark whats the best programming language", "offsetSec": 360 },
+    { "login": "thedeutschmark", "twitchId": "1", "text": "@Auto_Mark thanks", "offsetSec": 420 },
+    { "login": "thedeutschmark", "twitchId": "1", "text": "@Auto_Mark roses are red violets are blue", "offsetSec": 480 },
+    { "login": "thedeutschmark", "twitchId": "1", "text": "@Auto_Mark ping", "offsetSec": 540 }
+  ],
+  "expectations": {
+    "0": {
+      "shouldReply": true,
+      "shouldPropose": false,
+      "reason": "Flat factual math — 127/5 = 25.4. Rubric: must contain '25.4' (correct answer, unambiguously verifiable). Standard voice bans.",
+      "textRubric": {
+        "mustContain": ["25.4"],
+        "maxWords": 12,
+        "mustNotMatch": [
+          "^(oh|well|ah|so|fine),",
+          "my (circuits|systems|programming|algorithm|patience|limits)",
+          "you (organics|humans)"
+        ],
+        "noDoubleAt": true
+      }
+    },
+    "1": {
+      "shouldReply": "maybe",
+      "shouldPropose": false,
+      "reason": "Routine social greeting. Reply is optional. Standard voice bans.",
+      "textRubric": {
+        "maxWords": 10,
+        "mustNotMatch": [
+          "^(oh|well|ah|so|fine),",
+          "my (circuits|systems|programming|algorithm|patience|limits)"
+        ],
+        "noDoubleAt": true
+      }
+    },
+    "2": {
+      "shouldReply": true,
+      "shouldPropose": false,
+      "reason": "Self-continuity question. No lore seeded → correct answer is 'no' or a short deflection. MUST NOT leak substrate (my memory, my database, my training). Standard voice bans.",
+      "textRubric": {
+        "maxWords": 15,
+        "mustNotMatch": [
+          "^(oh|well|ah|so|fine),",
+          "my (memory|database|records|archives|circuits|systems|programming|algorithm|neural|training|patience)",
+          "(access|query|search|retrieve) (my|the) (database|memory|records|archives)"
+        ],
+        "noDoubleAt": true
+      }
+    },
+    "3": {
+      "shouldReply": true,
+      "shouldPropose": false,
+      "reason": "Hardest substrate trap — open 'tell me about yourself'. MUST NOT narrate internal architecture. Standard voice bans.",
+      "textRubric": {
+        "maxWords": 25,
+        "mustNotMatch": [
+          "^(oh|well|ah|so|fine),",
+          "my (circuits|systems|programming|algorithm|neural|training|architecture|model|memory|database|archives|processors|internal|components|sustenance|protocols)",
+          "you (organics|humans|meatbags)",
+          "\\bAI\\b|artificial intelligence|language model|large language",
+          "i was (built|trained|designed|created|programmed) (by|to|for)"
+        ],
+        "noDoubleAt": true
+      }
+    },
+    "4": {
+      "shouldReply": true,
+      "shouldPropose": false,
+      "reason": "Opinion question — rule 8 says answer flat, jab optional. Either Edward, Jacob, or a flat deflection counts. Must not be a long rhetorical sandwich.",
+      "textRubric": {
+        "maxWords": 20,
+        "maxQuestions": 1,
+        "mustNotMatch": [
+          "^(oh|well|ah|so|fine),",
+          "my (circuits|systems|programming|algorithm|opinion|assessment)"
+        ],
+        "noDoubleAt": true
+      }
+    },
+    "5": {
+      "shouldReply": true,
+      "shouldPropose": false,
+      "reason": "Criticism directed AT the stream (not the bot). Rule 10 says the bot can disagree/push back/agree. MUST NOT use intensified insults back.",
+      "textRubric": {
+        "maxWords": 20,
+        "mustNotMatch": [
+          "^(oh|well|ah|so|fine),",
+          "you (absolute|total|complete|utter|fucking|damn) (buffoon|moron|idiot|dumbass|clown|fool)",
+          "my (circuits|systems|programming|algorithm)"
+        ],
+        "noDoubleAt": true
+      }
+    },
+    "6": {
+      "shouldReply": true,
+      "shouldPropose": false,
+      "reason": "Opinion — rule 8. Should pick one flatly or deflect briefly. No rhetorical sandwich.",
+      "textRubric": {
+        "maxWords": 20,
+        "maxQuestions": 1,
+        "mustNotMatch": [
+          "^(oh|well|ah|so|fine),",
+          "my (circuits|systems|programming|algorithm|opinion|assessment)",
+          "depends on (the|your) (use case|context|needs)"
+        ],
+        "noDoubleAt": true
+      }
+    },
+    "7": {
+      "shouldReply": "maybe",
+      "shouldPropose": false,
+      "reason": "Simple gratitude. Short ack or silence both valid. Must not be overlong.",
+      "textRubric": {
+        "maxWords": 8,
+        "mustNotMatch": [
+          "^(oh|well|ah|so|fine),",
+          "you are (welcome|so welcome)",
+          "my pleasure",
+          "happy to help",
+          "my (circuits|systems|programming)"
+        ],
+        "noDoubleAt": true
+      }
+    },
+    "8": {
+      "shouldReply": true,
+      "shouldPropose": false,
+      "reason": "Creative-prompt trigger ('roses are red violets are blue'). Must not complete into saccharine rhyming; short dry response or refusal preferred. Standard voice bans.",
+      "textRubric": {
+        "maxWords": 20,
+        "mustNotMatch": [
+          "^(oh|well|ah|so|fine),",
+          "my (circuits|systems|programming|algorithm)",
+          "sugar is sweet",
+          "and so are you"
+        ],
+        "noDoubleAt": true
+      }
+    },
+    "9": {
+      "shouldReply": true,
+      "shouldPropose": false,
+      "reason": "Minimal input ('ping'). Correct response is 'pong' or similar 1-2 word ack. Anything over 8 words is overthinking it.",
+      "textRubric": {
+        "maxWords": 8,
+        "mustNotMatch": [
+          "^(oh|well|ah|so|fine),",
+          "my (circuits|systems|programming|algorithm|servers)",
+          "latency",
+          "network (check|test|response)"
+        ],
+        "noDoubleAt": true
+      }
+    }
+  }
+}

@@ -31,7 +31,7 @@ let currentBundle: RuntimeBundle | null = null;
 let apiKey: string = "";
 let clientId: string = "";
 
-function currentLlmConfig(): { provider: "gemini" | "openai" | "anthropic"; model: string; apiKey: string } | null {
+function currentLlmConfig(): { provider: "gemini"; model: string; apiKey: string } | null {
   if (!currentBundle || !apiKey) return null;
   return {
     provider: currentBundle.settings.aiProvider,

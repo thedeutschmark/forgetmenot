@@ -23,7 +23,7 @@
 import { getDb } from "../db/index.js";
 import { chatCompletion } from "../llm/adapter.js";
 
-type LlmConfig = { provider: "gemini" | "openai" | "anthropic"; model: string; apiKey: string };
+type LlmConfig = { provider: "gemini"; model: string; apiKey: string };
 
 /** Hours of inactivity before crash recovery closes a stale open session.
  *  Sized above the user's max stream length (4-8h) so a crash late in a long

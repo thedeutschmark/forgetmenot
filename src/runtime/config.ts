@@ -26,7 +26,7 @@ export interface BotSettings {
   offTopicTolerance: "strict" | "moderate" | "loose";
   memoryRetentionDays: number;
   compactionFrequency: "every_stream" | "daily" | "weekly";
-  aiProvider: "gemini" | "openai" | "anthropic";
+  aiProvider: "gemini";
   aiModel: string;
   /** How the bot sees the broadcaster — injected into prompt only when the
    *  current message author is the broadcaster login. See workers/auth

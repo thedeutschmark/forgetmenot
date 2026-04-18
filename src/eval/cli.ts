@@ -58,31 +58,11 @@ async function main() {
   const jsonOutput = args.includes("--json");
   const fixtureFilter = args.find((a) => !a.startsWith("--"));
 
-  // API key resolution is provider-aware. Provider is set via AI_PROVIDER
-  // env var (defaults to "gemini"); key is the matching provider-named
-  // env var, or the generic BOT_LLM_API_KEY fallback. This lets the eval
-  // run A/B comparisons like:
-  //   AI_PROVIDER=gemini   BOT_LLM_API_KEY=... npx tsx ... voice-discipline
-  //   AI_PROVIDER=anthropic ANTHROPIC_API_KEY=sk-ant-... npx tsx ... voice-discipline
-  const envProvider = (process.env.AI_PROVIDER || "").toLowerCase() as
-    | "gemini" | "openai" | "anthropic" | "";
-  if (envProvider === "openai" || envProvider === "anthropic" || envProvider === "gemini") {
-    EVAL_SETTINGS.aiProvider = envProvider;
-    if (envProvider === "anthropic") EVAL_SETTINGS.aiModel = "claude-haiku-4-5";
-    if (envProvider === "openai") EVAL_SETTINGS.aiModel = "gpt-4o-mini";
-  }
-  const providerKey =
-    EVAL_SETTINGS.aiProvider === "anthropic"
-      ? process.env.ANTHROPIC_API_KEY
-      : EVAL_SETTINGS.aiProvider === "openai"
-        ? process.env.OPENAI_API_KEY
-        : process.env.GEMINI_API_KEY;
-  const apiKey = providerKey || process.env.BOT_LLM_API_KEY || "";
+  const apiKey = process.env.BOT_LLM_API_KEY || process.env.GEMINI_API_KEY || "";
   if (!apiKey) {
-    console.error(`Set AI_PROVIDER={gemini,openai,anthropic} and the matching ${EVAL_SETTINGS.aiProvider.toUpperCase()}_API_KEY (or BOT_LLM_API_KEY fallback) to run evals.`);
+    console.error("Set BOT_LLM_API_KEY or GEMINI_API_KEY to run evals.");
     process.exit(1);
   }
-  console.log(`[eval] provider=${EVAL_SETTINGS.aiProvider} model=${EVAL_SETTINGS.aiModel}`);
 
   // Load fixtures
   const fixtureFiles = fs.readdirSync(FIXTURES_DIR).filter((f) => f.endsWith(".json"));

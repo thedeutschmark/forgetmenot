@@ -196,7 +196,7 @@ export async function onChatMessage(
           { role: "system", content: researchNote },
         ];
 
-        const reasoningModel = pickResearchModel(settings.aiProvider);
+        const reasoningModel = pickResearchModel();
         console.log(`[reply] TARS re-run: model=${reasoningModel} source=${researchSource} query="${sentinel.query.slice(0, 80)}"`);
 
         // Try the primary reasoning model, then fall back to a lighter
@@ -223,7 +223,7 @@ export async function onChatMessage(
 
         const primaryEmpty = reasoningResult !== null && !reasoningResult.text.trim();
         if (reasoningError !== null || primaryEmpty) {
-          const fallbackModel = pickResearchFallbackModel(settings.aiProvider);
+          const fallbackModel = pickResearchFallbackModel();
           const cause = reasoningError
             ? `error: ${reasoningError instanceof Error ? reasoningError.message.slice(0, 120) : String(reasoningError).slice(0, 120)}`
             : "empty_reply";
