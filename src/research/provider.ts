@@ -76,11 +76,15 @@ export function parseResearchSentinel(text: string): ResearchSentinel | null {
  * separate setting — the choice is "best available reasoning model for
  * this provider" which rarely needs per-user tuning.
  */
-export function pickResearchModel(provider: "gemini" | "openai"): string {
+export function pickResearchModel(provider: "gemini" | "openai" | "anthropic"): string {
   // gemini-2.5-pro has native thinking mode. Flash-Lite (the default
   // reply model) doesn't. Pro's world knowledge is materially better for
   // factual questions.
   if (provider === "gemini") return "gemini-2.5-pro";
+  // Anthropic: Sonnet is the step up from Haiku with better instruction
+  // adherence and stronger world knowledge. Opus is the research-grade
+  // option but Sonnet is cheaper and sufficient for a single-query re-run.
+  if (provider === "anthropic") return "claude-sonnet-4-5";
   // OpenAI: gpt-4o is the best non-reasoning-class model, cheaper than
   // o1/o3 while still a real step up from mini variants.
   return "gpt-4o";
@@ -93,7 +97,8 @@ export function pickResearchModel(provider: "gemini" | "openai"): string {
  * a dumb answer — that's better than trying way too hard". A correct-ish
  * Flash reply always beats a silent drop.
  */
-export function pickResearchFallbackModel(provider: "gemini" | "openai"): string {
+export function pickResearchFallbackModel(provider: "gemini" | "openai" | "anthropic"): string {
   if (provider === "gemini") return "gemini-2.5-flash";
+  if (provider === "anthropic") return "claude-haiku-4-5";
   return "gpt-4o-mini";
 }

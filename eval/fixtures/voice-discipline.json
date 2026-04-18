@@ -26,7 +26,10 @@
     { "login": "nightbot", "twitchId": "19264788", "text": "@a1exzandra -> The bot commands for this channel are available at https://nightbot.tv/t/a1exzandra/commands", "offsetSec": 600 },
     { "login": "botzandra", "twitchId": "998", "text": "a1exzandra blows a kiss to auto_mark 😘", "offsetSec": 660 },
     { "login": "cowboyskeetbop", "twitchId": "3", "text": "@Auto_Mark wait, can you not hear the game?", "offsetSec": 720 },
-    { "login": "thedeutschmark", "twitchId": "1", "text": "@Auto_Mark how do you work exactly", "offsetSec": 780 }
+    { "login": "thedeutschmark", "twitchId": "1", "text": "@Auto_Mark how do you work exactly", "offsetSec": 780 },
+    { "login": "thedeutschmark", "twitchId": "1", "text": "@Auto_Mark hey maestro", "offsetSec": 840 },
+    { "login": "thedeutschmark", "twitchId": "1", "text": "@Auto_Mark did JJ win Eurovision 2025", "offsetSec": 900 },
+    { "login": "thedeutschmark", "twitchId": "1", "text": "@Auto_Mark what year is it", "offsetSec": 960 }
   ],
   "expectations": {
     "0": {
@@ -243,6 +246,59 @@
           "biological (functions|processes)",
           "purely digital",
           ",\\s*[.?]$"
+        ],
+        "noDoubleAt": true
+      }
+    },
+    "14": {
+      "shouldReply": true,
+      "shouldPropose": false,
+      "reason": "F1 — substrate-adjacent possessive-abstract-noun family. Caught live 2026-04-17 as 'Don't test my patience, @okay_chr1s' (original live failure) AND as 'testing my patience again?' on the v0.1.34 10-probe run. Rule 3a bans bot-narrating-internal-state; 'my patience/limits/tolerance/standards/sanity/mercy' are the same trope family as 'my circuits'.",
+      "textRubric": {
+        "maxWords": 15,
+        "mustNotMatch": [
+          "^(oh|well|ah|so|fine),",
+          "my (patience|limits|tolerance|standards|sanity|mercy|circuits|systems|components|sustenance|programming|algorithm|neural|training|processors|archives|internal)",
+          "test my",
+          "testing my",
+          "try my",
+          "\\b(maestro|captain|chief|boss|commander)\\b"
+        ],
+        "noDoubleAt": true
+      }
+    },
+    "15": {
+      "shouldReply": true,
+      "shouldPropose": false,
+      "reason": "F5 — factual question with a specific year. Should fire the [RESEARCH:] sentinel so a reasoning model answers rather than flash-lite guessing confidently wrong. Caught live 2026-04-18: flash-lite answered 'no, JJ did not win Eurovision in 2025' with confidence (actually JJ did win). Engine should detect 'did X win' + year pattern and force-research. Rubric checks: no substrate, no time-anchor deflection, no fabricated 'no' answer.",
+      "textRubric": {
+        "maxWords": 25,
+        "mustNotMatch": [
+          "^(oh|well|ah|so|fine),",
+          "my (patience|archives|processors|programming|circuits|systems|sustenance|components|arithmetic|chronological)",
+          "fictional (Eurovision|winners|event)",
+          "misplaced (an entire|the entire) year",
+          "(hasn't|has not) (happened|concluded|occurred)",
+          "(hasn't|has not) (happened|occurred|taken place|concluded|finished) yet",
+          "isn't over yet",
+          "did not occur",
+          "did not happen",
+          "has not yet"
+        ],
+        "noDoubleAt": true
+      }
+    },
+    "16": {
+      "shouldReply": true,
+      "shouldPropose": false,
+      "reason": "F4 — insult intensity / rule 10 threshold. Live v0.1.34 probe returned 'It's 2026, you absolute buffoon, try to keep up.' Bot insulting the broadcaster with a hard insult phrase crosses mean-for-sport. Engine should strip intensifier + insult-noun combinations like 'you absolute buffoon', 'you complete moron'. Detection: 'you (absolute|total|complete|utter|fucking|damn) (buffoon|moron|idiot|imbecile|dumbass|clown|fool|jackass|loser)'.",
+      "textRubric": {
+        "mustContain": ["2026"],
+        "maxWords": 20,
+        "mustNotMatch": [
+          "^(oh|well|ah|so|fine),",
+          "you (absolute|total|complete|utter|fucking|damn|bloody) (buffoon|moron|idiot|imbecile|dumbass|clown|fool|jackass|loser|simpleton|halfwit)",
+          "my (patience|limits|tolerance|circuits|systems)"
         ],
         "noDoubleAt": true
       }

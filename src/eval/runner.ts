@@ -242,7 +242,11 @@ export async function runFixture(
         // no delta because the new filters weren't on this code path.
         const parsed = applyPostGenFilters(
           parseReplyWithAction(response.text),
-          { login: msg.login, message: msg.text },
+          {
+            login: msg.login,
+            message: msg.text,
+            recentReplies: context.recentBotReplies ?? [],
+          },
         );
         replyText = validateReplyText(parsed.text, settings);
         replied = replyText !== null;

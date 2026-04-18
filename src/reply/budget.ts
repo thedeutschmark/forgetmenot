@@ -184,6 +184,41 @@ export function detectCommandMode(message: string): boolean {
   return COMMAND_VERBS.some((v) => lower.includes(v));
 }
 
+// Factual-question patterns that should never be answered from the
+// default flash-lite model's own (stale or absent) world knowledge.
+// Observed live 2026-04-18: "did JJ win Eurovision 2025" → flash-lite
+// confidently said "no, JJ did not win" (JJ actually won). The model
+// had the context to know 2025 was past but not the fact itself, and
+// it answered anyway. The fix: force RESEARCH mode for these patterns
+// so the reasoning model runs, increasing the odds of correctness and
+// — critically — letting the model say "I don't know" cleanly when
+// the reasoning model also doesn't know.
+//
+// Narrow on purpose. "who are you" is not a factual question for this
+// gate. Year-bearing "did X win"/"who won"/"when did"/"what year"
+// patterns and explicit event+year references are the triggers.
+const FACTUAL_QUESTION_PATTERNS: ReadonlyArray<RegExp> = [
+  /\b(did|does|has) \w+ (win|won|beat|lose) (\b\w+\b\s*){0,4}?\b(19|20)\d{2}\b/i, // "did X win ... 2024"
+  /\bwho won (\b\w+\b\s*){0,6}?\b(19|20)\d{2}\b/i,                                  // "who won Eurovision 2025"
+  /\bwhen (did|was) \w+/i,                                                          // "when did X"
+  /\bwhat year (did|was)/i,                                                         // "what year did X"
+  /\b(19|20)\d{2} (world cup|olympics|eurovision|election|championship|super bowl|oscars|emmys|grammys)/i,
+  /\b(eurovision|world cup|olympics|championship|super bowl|oscars|emmys|grammys) \b(19|20)\d{2}\b/i,
+];
+
+/**
+ * Detect a question whose correctness hinges on a specific past-event
+ * fact. When fired, the engine injects a stronger "use [RESEARCH:] or
+ * say you don't know" directive into the system prompt — the default
+ * RESEARCH MODE block tells the model "fire the sentinel when uncertain"
+ * but flash-lite regularly bypasses it on year-bearing questions it
+ * THINKS it knows. The force variant removes the uncertainty-threshold
+ * hedge and requires research OR an explicit "I don't know".
+ */
+export function detectFactualQuestion(message: string): boolean {
+  return FACTUAL_QUESTION_PATTERNS.some((p) => p.test(message));
+}
+
 export function assemblePrompt(
   settings: BotSettings,
   policy: BotPolicy,
@@ -336,13 +371,32 @@ export function assemblePrompt(
   // replies is the target — so token cost stays negligible until it fires.
   // Narrow wording blocks two common abuses: dodging opinion questions and
   // faking uncertainty on things the bot clearly knows.
-  const thinkingFrame = settings.thinkingAllowed
+  //
+  // Force-research variant: when detectFactualQuestion matches the current
+  // message (year-bearing "did X win / who won / when did / what year"
+  // patterns), the thinkingFrame appends a non-negotiable directive.
+  // Background: flash-lite regularly bypasses the default "when uncertain
+  // → research" threshold on year-bearing questions it THINKS it knows.
+  // Observed live 2026-04-18: "did JJ win Eurovision 2025" produced a
+  // confidently wrong "no" answer. The force variant removes the self-
+  // assessment of uncertainty — the model MUST fire [RESEARCH:] or say
+  // "I don't know", no confident guessing allowed.
+  const baseThinkingFrame = settings.thinkingAllowed
     ? [
         "RESEARCH MODE.",
         "If the current message asks a specific factual question (a name, date, event, statistic, game mechanic, real-world fact) and you are not confident in the answer — including when you might be guessing — output exactly this and nothing else: [RESEARCH: <short query under 15 words>].",
         "Do NOT use this for opinion questions, recommendations, or anything rule 8 covers. DO use it whenever a factual answer feels uncertain — it is better to check than to confidently state something wrong. Do NOT wrap it in any other text. The runtime will hand the question to a smarter model and re-reply.",
         "SELF-ANCHORING GUARD: if YOUR RECENT REPLIES contains a previous answer of yours that said an event \"hasn't happened\", \"isn't over\", \"hasn't concluded\", or similar — IGNORE that prior reply. You were wrong then. Check the TODAY date at the top of this prompt, and if the event is in the past, fire the RESEARCH sentinel instead of repeating your earlier error. Doubling down on a wrong answer because you already said it is a failure mode, not consistency.",
       ].join(" ")
+    : "";
+
+  const forceResearchAmendment =
+    settings.thinkingAllowed && detectFactualQuestion(currentMessage)
+      ? " FORCE-RESEARCH: the current message is a year-bearing factual question (won/when/what year + specific year). Do NOT guess. You have two options: (a) output [RESEARCH: <short query>] and NOTHING else, or (b) reply with \"I don't know\" explicitly. Any other confident factual answer is forbidden for this message."
+      : "";
+
+  const thinkingFrame = baseThinkingFrame
+    ? baseThinkingFrame + forceResearchAmendment
     : "";
 
   const systemContent = [timeAnchor, persona, rules, creatorFrame, baitOverride, distressOverride, commandOverride, thinkingFrame, actionSchema].filter(Boolean).join("\n\n");

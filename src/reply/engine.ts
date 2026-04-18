@@ -247,7 +247,12 @@ export async function onChatMessage(
     // invisible to the eval harness and will regress silently.
     const parsed = applyPostGenFilters(
       parseReplyWithAction(response.text),
-      { login, message, log: (m) => console.log(`[reply] ${m}`) },
+      {
+        login,
+        message,
+        recentReplies: context.recentBotReplies ?? [],
+        log: (m) => console.log(`[reply] ${m}`),
+      },
     );
 
     // Bait fallback: if the viewer explicitly demanded a timeout AND fun
