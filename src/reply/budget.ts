@@ -219,6 +219,46 @@ export function detectFactualQuestion(message: string): boolean {
   return FACTUAL_QUESTION_PATTERNS.some((p) => p.test(message));
 }
 
+// Meta-self query patterns — viewer messages where asking about the
+// bot's own nature is the POINT of the message. Added 2026-04-18 per
+// the complexity guardrail + direct feedback: blanket-banning soft
+// substrate phrases ("my function", "my capabilities") is wrong
+// because when a viewer actually asks "what can you do", those words
+// are the right words. Context-aware substrate scrub uses this
+// detector to DECIDE whether to scrub — hostile-AI tropes (my
+// circuits, you organics) get scrubbed regardless, but soft self-
+// narration gets through when the viewer explicitly asked about
+// the bot.
+//
+// Narrow on purpose. "who are you" alone is too broad — viewers say
+// that rhetorically. The patterns here require an explicit "you" or
+// "your" referring to the bot AND a capability/nature word.
+const META_SELF_PATTERNS: ReadonlyArray<RegExp> = [
+  /\b(are|is) you (an? )?(ai|bot|robot|machine|llm|chatbot)\b/i,
+  /\byou (an? )?(ai|bot|robot|machine|llm|chatbot)\??$/i,
+  /\bhow (do|did) (you|they) (work|build|make|train|create|program)/i,
+  /\bwhat (model|language model|llm|engine|bot|system) (are you|do you use|did they)/i,
+  /\bwhat (are|is) your (capabilities|functions|abilities|limits|features|purpose|role|deal|story|function)/i,
+  /\btell me (about yourself|about you|who you are|what you are)/i,
+  /\bwhat can you (do|help with|answer|handle)/i,
+  /\bwho (built|made|trained|created|programmed|wrote) you/i,
+  /\bexplain (yourself|your (function|purpose|role|capabilities|abilities))/i,
+  /\bwhat'?s your (deal|story|purpose|function|role|whole (thing|deal))/i,
+  /\bhow'?d? they (build|make|train|create|program) you/i,
+  /\bhow do you work\b/i,
+];
+
+/**
+ * Did the viewer explicitly ask about the bot's nature/capabilities?
+ * When true, the substrate scrub relaxes — soft self-narration
+ * ("my function", "my capabilities") is allowed because the viewer
+ * literally requested it. Tier-1 hostile-AI tropes still get scrubbed
+ * unconditionally.
+ */
+export function detectMetaSelfQuery(message: string): boolean {
+  return META_SELF_PATTERNS.some((p) => p.test(message));
+}
+
 export function assemblePrompt(
   settings: BotSettings,
   policy: BotPolicy,

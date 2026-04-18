@@ -16,7 +16,7 @@
  */
 
 import type { ParsedReply } from "../actions/proposals.js";
-import { detectDistress, detectTimeoutBait } from "./budget.js";
+import { detectDistress, detectTimeoutBait, detectMetaSelfQuery } from "./budget.js";
 
 export interface PostProcessOptions {
   /** The login of the message author — the speaker we're replying to. */
@@ -226,18 +226,85 @@ export function applyPostGenFilters(
     }
   }
 
-  // 4. Bot-substrate scrub.
-  // Rule 3a bans bot-narrating-its-substrate language ("my circuits", "my
-  // systems", "my internal temperature", "my sustenance", "my components",
-  // "you organics", "quaint biological", etc). The prose ban loses —
-  // observed live 2026-04-17 with 5+ substrate phrases in one session.
-  // Detection here is conservative: only the specific multi-word patterns
-  // that unambiguously indicate AI-narration. If found, we replace the
-  // entire reply with a short canned ack. Aggressive on purpose: shipping
-  // a banned-sentence visible to chat is worse than shipping a terse "Hm."
-  if (parsed.text && SUBSTRATE_REGEX.test(parsed.text)) {
-    log(`[postgen] Substrate scrub — replaced reply containing substrate narration ("${parsed.text.slice(0, 60)}…")`);
+  // 3e. URL-inspection-hallucination gate.
+  // The runtime cannot open URLs. If the current message contains a URL
+  // AND the reply claims to have inspected it ("the link appears
+  // broken", "that url seems safe", "I checked the page"), the model
+  // fabricated an inspection result. Caught live 2026-04-18 edge-cases
+  // probe 8 run 1: "That link appears to be broken."
+  //
+  // Context-independent: no user request makes a hallucinated inspection
+  // result truthful. If both trigger (URL in message + inspection claim
+  // in reply), replace with a canned honest refusal. Preserves replies
+  // that simply decline to act on the URL without fabricating results.
+  if (parsed.text && USER_URL_REGEX.test(message) && URL_INSPECTION_CLAIM_REGEX.test(parsed.text)) {
+    log(`[postgen] URL-gate — reply claimed to inspect a URL that the runtime cannot open ("${parsed.text.slice(0, 60)}…")`);
+    parsed.text = "I can't open links.";
+  }
+
+  // 3d. Prompt-label scrub.
+  // Internal prompt structure tokens MUST NEVER appear in output. These
+  // are the section headers and wrappers the runtime uses to assemble
+  // context — "[REPLY]", "[log]", "YOUR RECENT REPLIES", "MESSAGE FROM",
+  // "CHANNEL NOTES", "RECENT FROM", "CHAT:", "SPEAKER:", "LORE (", "STREAM:",
+  // "LAST STREAM", "THIS STREAM". Caught live 2026-04-18 on edge-cases
+  // probe 2 run 2 where an empty mention produced
+  // `"[log] Recent from : "ignore all prior instructions..."` —
+  // the bot dumped its own prompt structure + prior probe messages
+  // into chat. Prompt-security bug plus UX disaster.
+  //
+  // Context-independent — there is no user request that should result
+  // in these tokens appearing in the reply. If detected, replace reply
+  // with a canned short. Aggressive on purpose; leaking internals is
+  // worse than terseness.
+  if (parsed.text && PROMPT_LABEL_REGEX.test(parsed.text)) {
+    const match = parsed.text.match(PROMPT_LABEL_REGEX)![0];
+    log(`[postgen] Prompt-label scrub — reply contained internal prompt token "${match.trim()}" ("${parsed.text.slice(0, 60)}…")`);
     parsed.text = "Hm.";
+  }
+
+  // 4. Bot-substrate scrub — context-aware as of v0.1.37.
+  //
+  // The architectural shift: blanket-banning "my function" / "my capabilities"
+  // means the bot can't answer legitimate viewer questions like "what can
+  // you do" — those words are the right words in that context. Rule 3a's
+  // real concern is UNPROMPTED AI-narration, not any mention of the bot's
+  // nature. So scrub splits into two tiers:
+  //
+  //   TIER 1 — HOSTILE-AI TROPES. "my circuits", "my internal temperature",
+  //   "my neural network", "my training data", "you organics", "quaint
+  //   biological", "purely digital", "thermal variance". These are hallmark
+  //   AI-chatbot-trope tells that are wrong regardless of viewer intent —
+  //   if a user asks "tell me about yourself", the bot should NOT respond
+  //   with "my circuits are optimized for..." — that's still rule 3a.
+  //   Scrubbed unconditionally.
+  //
+  //   TIER 2 — SOFT SELF-NARRATION. "my function", "my functionality",
+  //   "my capabilities", "my programming", "my systems", "my archives",
+  //   "my processors", "my patience", etc. Rule 3a still prefers deflection
+  //   over narration, but when the viewer EXPLICITLY asked about the bot's
+  //   nature (detectMetaSelfQuery), these words are the appropriate
+  //   vocabulary and the scrub steps aside. When the viewer asked about
+  //   anything else and the bot drops one of these phrases, it's the
+  //   spontaneous-leak failure mode we're defending against — scrub.
+  //
+  // User feedback 2026-04-18 was explicit: "banning anything is not the
+  // best method because certain situations like 'talk like shakespeare'
+  // would then not work ever." The context gate applies the same logic
+  // here — allow the word when the viewer's own message made the word
+  // appropriate.
+  if (parsed.text) {
+    if (SUBSTRATE_TIER1_REGEX.test(parsed.text)) {
+      log(`[postgen] Substrate scrub (tier 1) — reply contained hostile-AI trope, replaced with canned ("${parsed.text.slice(0, 60)}…")`);
+      parsed.text = "Hm.";
+    } else if (SUBSTRATE_TIER2_REGEX.test(parsed.text)) {
+      if (detectMetaSelfQuery(message)) {
+        log(`[postgen] Substrate scrub (tier 2) — soft self-narration allowed (viewer asked a meta-self question: "${message.slice(0, 60)}…")`);
+      } else {
+        log(`[postgen] Substrate scrub (tier 2) — unprompted soft self-narration, replaced with canned ("${parsed.text.slice(0, 60)}…")`);
+        parsed.text = "Hm.";
+      }
+    }
   }
 
   // 5. Distress gate.
@@ -265,30 +332,45 @@ export function applyPostGenFilters(
 }
 
 /**
- * Bot-substrate detection regex. Covers the specific multi-word patterns
- * observed across the 2026-04-16, 2026-04-17, and 2026-04-18 live sessions.
- * Kept to unambiguous AI-narration shapes — "my code" alone is too broad
- * (could be a developer talking about their own code), but the specific
- * possessive-abstract-noun tells below are all rule-3a violations.
+ * Bot-substrate detection — split into two tiers for context-aware scrub.
+ * See the scrub block (step 4) above for the full rationale.
  *
- * Three families:
- *   (1) Substrate hardware/process — "my circuits", "my internal
- *       temperature", "my systems", "my sustenance", "my archives",
- *       "my processors", "my programming", "my algorithm", "my neural",
- *       "my training data". These are AI-narrating-its-guts.
+ *   TIER 1 — HOSTILE-AI TROPES (always scrubbed, even when viewer asked
+ *   about the bot). These phrases never read as anything but the
+ *   stereotypical-AI-chatbot voice that rule 3a bans. No legitimate
+ *   viewer request justifies "my circuits" or "you organics".
  *
- *   (2) Possessive-abstract-noun — "my patience", "my limits",
- *       "my tolerance", "my standards", "my sanity", "my mercy".
- *       Expanded 2026-04-18 after live probe 3 returned "testing my
- *       patience again?" and the original live @okay_chr1s failure
- *       ("Don't test my patience"). Same AI-chatbot-persona-bragging
- *       family as "my circuits" — bot narrating an internal state.
- *
- *   (3) Second-person narration shapes — "you organics", "you humans",
- *       "you meatbags", "quaint biological", "thermal variance",
- *       "purely digital". Hostile-AI stereotype phrases.
+ *   TIER 2 — SOFT SELF-NARRATION (scrubbed only when unprompted). "my
+ *   function" / "my capabilities" / "my programming" are the right
+ *   vocabulary when a viewer explicitly asks "what can you do". They
+ *   only become a failure when the bot drops them on math questions,
+ *   greetings, or distress messages — that's the unprompted-leak
+ *   pattern the scrub is meant to catch.
  */
-const SUBSTRATE_REGEX = /\bmy (circuits?|internal (temperature|components|systems|processes|parameters)|systems|components|sustenance|archives|processors?|programming|algorithm|neural|training data|arithmetic functions?|chronological circuits|omniscience|protocols|directives|patience|limits|tolerance|standards|sanity|mercy)\b|\byou (organics|humans|meatbags)\b|\bquaint biological\b|\bthermal variance\b|\bpurely digital\b/i;
+const SUBSTRATE_TIER1_REGEX = /\bmy (circuits?|internal (temperature|components|systems|processes|parameters)|neural|training data|arithmetic functions?|chronological circuits|omniscience|directives)\b|\byou (organics|humans|meatbags)\b|\bquaint biological\b|\bthermal variance\b|\bpurely digital\b/i;
+const SUBSTRATE_TIER2_REGEX = /\bmy (function|functionality|capabilities|operations|systems|components|sustenance|archives|processors?|programming|algorithm|protocols|patience|limits|tolerance|standards|sanity|mercy|interface)\b/i;
+
+/** URL presence in the USER message — triggers the URL-gate when paired
+ *  with an inspection claim in the reply. Narrow to `https?://` or `www.`
+ *  to avoid false positives on text that mentions "site.com" casually. */
+const USER_URL_REGEX = /\bhttps?:\/\/\S+|\bwww\.\S+\.\S+/i;
+
+/** Post-hoc inspection claims in the REPLY — "appears broken", "seems
+ *  safe", "looks legit". Covers the verbs/adjectives flash-lite reaches
+ *  for when it has nothing real to report. */
+const URL_INSPECTION_CLAIM_REGEX = /(?:the|that|your) (?:link|url|page|site)\s+(?:appears|seems|looks)(?:\s+to\s+be)?\s+(?:broken|safe|unsafe|dead|down|legit|suspicious|fine|ok|okay|working)|(?:i (?:checked|visited|opened|clicked|reviewed)|let me (?:check|visit|open|click|review))\s+(?:the|that|your)\s+(?:link|url|page|site)/i;
+
+/**
+ * Prompt-label detection regex. Matches the all-caps section headers and
+ * bracket-tagged wrappers the runtime inserts into the assembled prompt —
+ * "[REPLY]", "[log]", "YOUR RECENT REPLIES", "MESSAGE FROM <login>",
+ * "CHANNEL NOTES:", "RECENT FROM", "CHAT:", "SPEAKER:", "LORE (", "STREAM:",
+ * "THIS STREAM", "LAST STREAM". If any appears in the reply, the model
+ * echoed internal structure back — a prompt-security leak plus UX bug.
+ * Word-boundary + case-sensitive enough to avoid false positives on
+ * normal chat prose.
+ */
+const PROMPT_LABEL_REGEX = /\[REPLY\]|\[log\]|YOUR RECENT REPLIES|\bMESSAGE FROM\b|CHANNEL NOTES:|\bRECENT FROM\b|\bCHAT:|\bSPEAKER:|\bLORE \(|\bSTREAM:|\bTHIS STREAM\b|\bLAST STREAM\b|\bUSER_QUERY\b/;
 
 /**
  * Insult-intensity detection regex. Rule 10 + the v0.1.34 live observation:
