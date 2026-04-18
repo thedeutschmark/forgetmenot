@@ -402,7 +402,7 @@ const SUBSTRATE_TIER2_REGEX = /\bmy (function|functionality|capabilities|operati
  * the phrase. Case-insensitive. Anchored with a leading `[\s,]` so we
  * don't strip "the HOW original" false positives.
  */
-const HOW_CONDESCENSION_REGEX = /[,\s]+how (original|quaint|cute|precious|adorable|predictable|amusing|delightful|tragic|fascinating|intriguing|impressive|clever)\b[,.!?]*/i;
+const HOW_CONDESCENSION_REGEX = /[,\s]+how (original|quaint|cute|precious|adorable|predictable|amusing|delightful|tragic|fascinating|intriguing|impressive|clever|shocking|riveting|inspiring|surprising|touching|charming)\b[,.!?]*|[,\s]+(shocking|groundbreaking|riveting)[.!?]/i;
 
 /**
  * Creator-mean-for-sport regex — rule-10 broadcaster-specific bans.
@@ -434,7 +434,7 @@ const URL_INSPECTION_CLAIM_REGEX = /(?:the|that|your) (?:link|url|page|site)\s+(
  * Word-boundary + case-sensitive enough to avoid false positives on
  * normal chat prose.
  */
-const PROMPT_LABEL_REGEX = /\[REPLY\]|\[log\]|\[said\]|\[reported\]|\[guess\]|YOUR RECENT REPLIES|\bMESSAGE FROM\b|CHANNEL NOTES:|\bRECENT FROM\b|\bCHAT:|\bSPEAKER:|\bLORE \(|\bSTREAM:|\bTHIS STREAM\b|\bLAST STREAM\b|\bUSER_QUERY\b|PATHOS GATE ACTIVE|COMMAND MODE ACTIVE|BAIT DETECTED|MINIMAL INPUT|RESEARCH MODE|SELF-ANCHORING GUARD|FORCE-RESEARCH|CREATOR PRESENT|HARD RULES?:|\[GLaDOS.*?\]|\[HAL.*?\]|\[TARS.*?\]/i;
+const PROMPT_LABEL_REGEX = /\[REPLY\]|\[log\]|\[said\]|\[reported\]|\[guess\]|YOUR RECENT REPLIES|\bMESSAGE FROM\b|CHANNEL NOTES:|\bRECENT FROM\b|\bCHAT:|\bSPEAKER:|\bLORE \(|\bSTREAM:|\bTHIS STREAM\b|\bLAST STREAM\b|\bUSER_QUERY\b|\bPATHOS GATE\b|\bCOMMAND MODE\b|BAIT DETECTED|\bMINIMAL INPUT\b|\bRESEARCH MODE\b|SELF-ANCHORING GUARD|FORCE-RESEARCH|CREATOR PRESENT|HARD RULES?:|\[GLaDOS.*?\]|\[HAL.*?\]|\[TARS.*?\]/i;
 
 /**
  * Insult-intensity detection regex. Rule 10 + the v0.1.34 live observation:

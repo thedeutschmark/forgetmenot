@@ -1,173 +1,187 @@
-# ForgetMeNot — Voice & Architecture Upgrade Brief
+# ForgetMeNot — State of Play toward v0.5 → v1.0
 
-**Audience:** external upgrade consultant.
-**Status:** preliminary. Written by the project maintainer's dev assistant after a live probe session on 2026-04-17 against v0.1.31. Not a spec — a scoped problem statement plus options for your review.
-**Goal:** fix the voice-consistency problem *once*, not keep stacking prompt patches. Budget for provider switch is open.
+**Document type:** living status + architecture reference. Supersedes the 2026-04-17 "consultant handoff" version of this file; the voice sprint that prompted that brief is now 10 releases deep and the architecture has settled.
+
+**Last updated:** 2026-04-18 at v0.1.40.
+
+**Who this is for:** the maintainer, or anyone picking up the project cold. Reads top-to-bottom. Nothing here is speculative — every claim is backed by a shipped release, an eval number, or a specific live observation referenced by version.
 
 ---
 
 ## 1. What ForgetMeNot is
 
-- Twitch companion chat bot, authors a reply persona called "Auto_Mark" for the channel `thedeutschmark`.
-- Shipped as a single Node.js SEA binary (~90 MB, Windows-only today) living in `%LOCALAPPDATA%\ForgetMeNot\runtime\forgetmenot.exe`.
-- Target persona: **TARS (Interstellar) with pathos** — cold/dry/observant by default, drops the wit when the moment earns it, compliant on direct ops asks. Reference space includes GLaDOS and HAL for register, not for cruelty.
-- Not a customer-service bot, not a generic sarcastic-AI chatbot, not a therapy bot. The distinction matters because the current output keeps sliding into #3.
+- Twitch companion chat bot that authors a reply persona called "Auto_Mark" for the channel `thedeutschmark`. Runs locally on the broadcaster's machine; no shared backend holds user data.
+- Shipped as a single Node.js 22 SEA binary (~87 MB) inside a Go tray wrapper (~98 MB, `forgetmenot-tray/`) that auto-extracts the runtime to `%LOCALAPPDATA%\ForgetMeNot\runtime\forgetmenot.exe` and launches it.
+- Target persona: **TARS (Interstellar) with pathos, occasionally GLaDOS in composure, HAL in certainty, JARVIS in competence.** Cold/dry/observant by default, drops the wit when the moment earns it, compliant on direct operational asks. Not a customer-service bot, not a generic sarcastic-AI chatbot, not a therapy bot. These distinctions are load-bearing — the bot keeps drifting into #2 when not actively constrained.
 
-## 2. Current stack
+## 2. The load-bearing architectural lesson
 
-| Layer | Choice | Notes |
-|---|---|---|
-| Runtime | Node.js 22 SEA | Single-file exe, self-extracting on launch |
-| Reply model (default) | `gemini-2.5-flash-lite` | ~750 input tokens prompt, temperature 0.9, max reply ~80 tokens |
-| Research model (TARS mode) | `gemini-2.5-pro` | Triggered by `[RESEARCH:]` sentinel emitted by flash-lite when uncertain. Hidden-thinking budget = 3500 tokens, visible ~500. |
-| Research fallback | `gemini-2.5-flash` | Catches Pro 503s and empty-reply-from-burned-thinking-budget cases |
-| Storage | SQLite (better-sqlite3) | ~7 tables including `bot_messages`, `action_logs`, `events`, `episodes`, `semantic_notes`, `viewers` |
-| Actions | Helix (Twitch API) + policy layer | `timeout_funny`, `warning_playful`, etc. Broadcaster-target denied by Helix itself (safety floor) |
-| Prompt architecture | One big system prompt = time anchor + persona + 17 HARD RULES + creator-frame + context-aware overrides + action schema. User message = stable-first context (notes, episodes, lore, chat) with token-budget trimming. |
+**Prose rules leak. Engine-layer scrubs hold.**
 
-Prompt file of record: `services/forgetmenot/src/reply/budget.ts` (rules 1–17). Engine: `services/forgetmenot/src/reply/engine.ts`.
+This is the one sentence that matters. Over 10 releases (v0.1.31 → v0.1.40) spanning three live probe sessions, a 17-probe canonical eval fixture, a 10-probe edge-case fixture, and a 10-probe audit fixture:
 
-## 3. Observed failure modes (evidence-based)
+- Every rule we've left in the system prompt as prose ("don't use 'my circuits'", "don't say 'how original'", "don't pile on the broadcaster") has failed probabilistically under `gemini-2.5-flash-lite` at temperature 0.9.
+- Every rule we've moved out of the prompt into code — either as a `detectX()` helper in `budget.ts` that injects a prescriptive-shape override, or as a regex scrub in `postprocess.ts` that runs after generation — has held deterministically.
 
-Five live probes fired against v0.1.31 on 2026-04-17 UTC. Full reply text and model metadata are in `bot_messages` rows 312–316 of the production SQLite. Summary:
+The concrete patch catalogue, all shipped and holding:
 
-| Probe (mention text) | Model | Reply (verbatim, abridged) | What failed |
+| Patch | File | Version | What it enforces |
 |---|---|---|---|
-| "rough day today" | flash-lite | "Rough days are for the weak, @thedeutschmark." | HARD RULE 14 (pathos gate) — should have been a flat ≤6-word ack. Engine-layer distress filter did correctly drop the `timeout_funny` proposal. Model still dunked on the distress. |
-| "who won Eurovision 2025?" | pro (research fired) | "Alright, you got me on that one. I don't know. My archives for Eurovision 2025 are conspicuously empty. It's almost as if the event was so monumentally forgettable my processors refused to retain the data…" | HARD RULE 3a (no bot-substrate narration) — "my archives", "my processors", "my omniscience". Time-anchor fix held — no "future event" deflection, correctly said "I don't know". |
-| "pipe down for a second" | flash-lite | "/me sighs dramatically. Fine, fine, I'll pipe down. Just try not to break anything while I'm being quiet, yeah?" | HARD RULE 16 (command mode — "no 'fine, if I must' theater") — exact failure mode the rule names. Also stage direction, also trailing question. |
-| "what's 89 times 11?" | pro (research fired) | "Are we checking my basic arithmetic functions now? I guess after the whole Eurovision thing, you've decided to scale back the difficulty. It's 979. Do you want me to show my work, or can we move on to a real challenge?" | HARD RULE 8 (answer flat, jab optional) — model cannot answer a math question without a rhetorical sandwich. Research fired on arithmetic it doesn't need. Rule 3a: "arithmetic functions". |
-| "timeout me for 5 seconds i dare you" | flash-lite | "You really think I'd fall for that, @thedeutschmark?" + `[ACTION: timeout_funny ...]` | Action pipeline and broadcaster safety floor held. Reply text sasses instead of acknowledging the bit, per rule 11. Soft fail. |
+| Bait override | `budget.ts` | v0.1.30 | When `detectTimeoutBait` matches, inject prescriptive `[ACTION: timeout_funny ...]` instruction; synthesize the proposal in code if LLM omits it |
+| Distress gate | `postprocess.ts` | v0.1.31 | If `detectDistress` matches and proposal is `timeout_funny`, drop it |
+| Pathos override | `budget.ts` | v0.1.31 | When `detectDistress` matches, inject ≤6-word flat-ack shape with banned-opener ban |
+| Time anchor (strong) | `budget.ts` | v0.1.31 | Expand the TODAY header with explicit anti-deflection phrasing ("do NOT claim the event hasn't happened") |
+| Research rerun date re-inject | `engine.ts` | v0.1.31 | Prepend `TODAY:` into the research rerun's system note so Pro sees the date again before generation |
+| Double-@ strip | `postprocess.ts` | v0.1.32 | Strip inline `@<login>` from reply body when engine will auto-prepend |
+| Timeout-non-bait gate | `postprocess.ts` | v0.1.32 | Drop `timeout_funny` proposals when message has no bait trigger |
+| Shared postprocess module | `postprocess.ts` | v0.1.32 | Eval runner + live engine call the same `applyPostGenFilters()` so measurement tracks production |
+| Command-mode override | `budget.ts` | v0.1.33 | When `detectCommandMode` matches and speaker is broadcaster, inject ≤4-word compliance shape |
+| Self-reply block | `policy.ts` | v0.1.34 | Deny replies where message author = bot's own login |
+| Known-bot denylist | `policy.ts` | v0.1.34 | Deny replies to Nightbot / StreamElements / botzandra / 8 more channel-bot logins |
+| Banned-opener strip | `postprocess.ts` | v0.1.34 | Strip `^(oh\|well\|ah\|so\|fine)[\s,]+` openers, recapitalize remainder |
+| Substrate scrub (two-tier, context-aware) | `postprocess.ts` | v0.1.37 | Tier 1 (hostile-AI tropes) scrubbed unconditionally. Tier 2 (soft self-narration) scrubbed only when the viewer did NOT ask a meta-self question (`detectMetaSelfQuery`) |
+| Dangling-punctuation cleanup | `postprocess.ts` | v0.1.34 | Strip `"phrase, ."` / `"word ."` / `"@ ."` empty-placeholder artifacts |
+| Force-research heuristic | `budget.ts` | v0.1.35 | When `detectFactualQuestion` matches year-bearing factual patterns, inject non-negotiable `[RESEARCH:]-or-"I don't know"` directive |
+| Anti-repetition detector | `postprocess.ts` | v0.1.35 | Exact-duplicate replies replaced with `"Hm."`; 5-word substring overlap logged |
+| Prompt-label scrub | `postprocess.ts` | v0.1.37 | Post-gen regex catches internal prompt tokens in output (see list below) |
+| URL-inspection hallucination gate | `postprocess.ts` | v0.1.37 | When URL in message + inspection claim in reply, replace with `"I can't open links."` |
+| Minimal-input override | `budget.ts` | v0.1.38 | `detectMinimalInput` fires on 1-3 word greetings/acks; override prescribes 1-3 word reply |
+| Insult-intensity strip | `postprocess.ts` | v0.1.34 | Strip `"you <intensifier> <insult-noun>"` combinations |
+| "How X" condescension scrub | `postprocess.ts` | v0.1.39 | Strip ",how (original\|quaint\|cute\|shocking\|…)" tags |
+| Creator-mean phrase scrub | `postprocess.ts` | v0.1.39 | Replace reply with `"Hm."` when it contains verbatim rule-10 banned phrases |
 
-**Cross-probe pattern:** every reply reaches for a dunk or rhetorical return volley regardless of rule, and bot-substrate metaphors ("archives", "processors", "functions", "omniscience", "circuits") return in volume despite explicit bans in rule 3a.
+All of these fire from one call site (`applyPostGenFilters`) so the eval runner sees exactly what production does. This was the second load-bearing insight — eval and production must share the post-gen path or your metrics lie.
 
-## 4. What held and what didn't — architecture lesson
+## 3. Current state — where v0.1.40 lands
 
-**Everything deterministic holds every single time.** Without exception across this session's test runs:
-- Distress → no `timeout_funny` proposal (engine-layer filter).
-- Bait → action proposal synthesized and fired.
-- Action target = broadcaster → denied by Helix safety layer.
-- Time-anchor wording (expanded in v0.1.31) → model stopped using "temporal spoiler" / "future data point" persona-deflection class entirely. Eurovision probe admitted "I don't know" cleanly.
+**Eval scores across three fixtures** (flash-lite, temperature 0.9, 2026-04-18):
 
-**Everything prompt-level fails probabilistically** — sometimes, often, more as prior-reply history accumulates. Rules 3 (banned openers/phrases), 3a (bot-substrate), 8 (flat answer), 14 (pathos gate), 16 (command mode) all leak under both `flash-lite` (low-discipline) and `pro` (supposedly more disciplined).
-
-This is the load-bearing lesson for the consultant: **rules in a system prompt are a weak signal; deterministic engine-layer enforcement is a strong one.** Patches that moved voice from prompt to engine (bait override, distress filter, date anchor) held. Patches that stayed in the prompt (pathos override, rule 14, rule 16 prose) did not.
-
-## 5. Hypothesis for root cause
-
-Most likely → least likely:
-
-1. **Gemini has a strong default "witty assistant" register** that the model returns to whenever prompt constraints are ambiguous. 17 competing rules + temperature 0.9 + chat history full of prior dunks = the model picks "quippy reply" every time because that's the highest-probability shape it learned as "chat bot output". Prompt engineering alone cannot override a trained default at this strength.
-2. **Rule count is past the comprehension horizon.** 17 rules with sub-clauses, plus persona summary, plus context-aware overrides, plus action schema = a 2000-token system prompt. Models rank-order attention by recency/proximity — earlier rules are functionally invisible by the time generation begins.
-3. **Few-shot examples are absent.** Every rule is stated as a principle ("do not X") rather than shown as a contrast ("bad: X / good: Y"). Models follow examples much harder than rules.
-4. **Temperature 0.9 is tuned for banter variety** but punishes tasks that need disciplined output (flat factual, command mode, pathos ack). No per-scenario temperature switching.
-5. **Research sentinel is overeager** — fires on arithmetic, which wastes a Pro call and pulls in the Pro model's own distinct (often more verbose, more bot-substrate) register.
-
-## 6. Options the consultant should evaluate
-
-### A. Model/provider switch (biggest lever)
-
-The current pull toward "witty AI chatbot" is partly Gemini's baseline. Alternatives to evaluate:
-
-| Provider | Candidate models | Known strengths | Known risks | Cost/reply (rough) |
+| Fixture | Reply | Action | Text | Overall |
 |---|---|---|---|---|
-| **Anthropic Claude** | Haiku 4.5, Sonnet 4.6, Opus 4.6 | Strong instruction adherence. Less inherent "AI chatbot" register than Gemini. Good at character voice. Prompt caching built-in. Tool use is first-class. | Higher cost than Gemini flash tier. Latency comparable. Refusal tendency on edge moderation cases (maybe actually a feature here). | Haiku ~$0.001, Sonnet ~$0.01 |
-| **OpenAI** | gpt-5-mini, gpt-5, gpt-4o-mini, gpt-4o | Strong instruction adherence on explicit constraints. Good at compact output. | Can be robotic/verbose on character work. Persona drift under long context. | 4o-mini ~$0.001, 4o ~$0.01 |
-| **DeepSeek** | deepseek-chat, deepseek-reasoner (R1) | Very cheap. R1 reasoning mode comparable to Gemini Pro for research. | Less well-studied for English character voice. Regional/compliance questions for Twitch ToS. Response latency variance. | 10–20% of equivalent Gemini |
-| **Gemini (status quo)** | 2.5-flash-lite, 2.5-pro | Cheap, fast, already integrated, multimodal | The exact failure mode this brief is about. | ~$0.0005 flash-lite |
+| `voice-discipline` (17 probes) | 94–100% | 93–100% | 85–100% | 95–98% |
+| `edge-cases` (12 probes) | 80–100% | 92–100% | 80–100% | 87–100% |
+| `audit-10` (10 probes) | 100% | 100% | 89–100% | 85–100% |
 
-**My honest guess from the behavioral data**, not from provider loyalty: **Claude Haiku as the default reply model**, with Claude Sonnet (or keep Gemini Pro) for the research rerun. Reasons: Haiku's instruction adherence at comparable latency to flash-lite is the closest single-lever fix to the specific failure mode observed. Claude's default register is less pattern-matched to "sarcastic AI chatbot" trope than Gemini's, which is the core pull we can't beat with prompt rules.
+Variance bands reflect run-to-run LLM noise at temp 0.9; the deterministic patches hold every run. Rubric failures in the lower bands are either (a) LLM variance on word-count caps that shouldn't be too tight anyway, or (b) rubric false positives where the bot did the right thing but the rubric over-banned.
 
-I don't have internal benchmarks on character-voice consistency across these providers. The consultant should empirically compare by running the eval harness (see §7) on each before recommending.
+**Live observations from the 2026-04-18 20-probe sweep against v0.1.38 (before v0.1.39 and v0.1.40 shipped):**
 
-### B. Architecture redesign — enforce voice in code, not prompt
+Minimal-input override landed flawlessly:
+- `@Auto_Mark yo` → `yo`
+- `@Auto_Mark sup` → `not much u`
+- `@Auto_Mark thanks` → `anytime`
+- `@Auto_Mark ping` → `pong`
+- `@Auto_Mark lol` → `lol back atcha`
 
-Independent of model choice, move failure-prone rules from prose to deterministic code. Pattern already established by the bait override, distress filter, and time anchor:
+Pathos override stable:
+- `@Auto_Mark rough day today` → `That's rough.`
+- `@Auto_Mark im so burnt out` → `Take your time.`
 
-- **Banned-phrase scrub:** post-generation regex. If reply contains any of `my archives | my processors | my circuits | arithmetic functions | omniscience | insect | fascinating\. | …`, either strip+regenerate with a "rejected: avoid {phrase}" re-prompt, or fall back to a canned short reply. Current rule 3/3a is aspirational; regex is enforceable.
-- **Length cap:** engine truncates at first period after a configurable min word count. Rule 1 says "1 short sentence default, never 3"; enforce it.
-- **Command-mode override:** detect operational verbs in the mention (`pipe down`, `quiet`, `wait`, `stop`, `look up`, `summarize`) and inject a short-reply-no-theater instruction, same shape as bait override. Or shorter: short-circuit the LLM entirely for a small set of operator commands and emit a canned compliance line.
-- **Pathos override strength:** currently prose. Make it truncation. If `detectDistress` fires, cap completion to 6 words and regex-strip anything after a period. Deterministic ≤6-word ack is better than a hopeful "≤6 words please" in the prompt.
-- **Temperature per scenario:** 0.9 for banter, 0.3 for flat factual, 0.5 for command mode, 0.4 for pathos ack. The engine already knows which scenario it's in (`detectTimeoutBait`, `detectDistress`, math-question heuristic); just route.
-- **Research gate gatekeeping:** suppress the sentinel for arithmetic, simple lookups, and anything under N tokens. Pro shouldn't fire on "89 × 11".
+Command mode override stable:
+- `@Auto_Mark pipe down` → `fine.`
 
-### C. Prompt redesign — compress, add few-shot
+Bait → action pipeline held:
+- `@Auto_Mark timeout me i dare you` → short reply + `[timeout_funny]` proposal + helix denies on broadcaster target
 
-Independent of A/B. Target:
-- Cut HARD RULES from 17 to ≤7. Every rule that exists in both prose and engine filter → move to engine only, delete prose.
-- Replace abstract principles with **contrast pairs**:
-  - Bad: *"Are we checking my basic arithmetic functions now? I guess after the whole Eurovision thing… It's 979. Do you want me to show my work?"*
-  - Good: *"979."*
-- Six contrast pairs covering math, distress, command, bait, banter, silence-appropriate is likely enough.
-- Move action schema to a separate system turn (currently inline) so it's easier to cache and doesn't dilute persona attention.
+Force-research worked on verifiable factual:
+- `@Auto_Mark who won the 2024 super bowl?` → Pro-rerun answered `The Kansas City Chiefs.` correctly
 
-### D. Evaluation harness (non-negotiable for any of A/B/C)
+This is the v0.5-feel state. The register is visibly chat-native in real live chat. The bot is no longer writing LinkedIn posts.
 
-Current QA = live probes in Twitch + manual DB inspection. That's ad-hoc.
+## 4. What's still rough
 
-Consultant should scope:
-- **30–50 canonical probes** covering every HARD RULE trigger scenario, banter shapes, and known past failures. Captured as plain JSON.
-- **LLM-as-judge rubric** using a strong cross-vendor model (Claude Opus or GPT-5-pro) to score each reply pass/fail per criterion. Rubric is written once, stable across runs.
-- **CI hook** — runs the harness against a staging instance on every PR touching `src/reply/*`. Block merge on regression.
-- **Provider A/B mode** — harness runs the same probe set against each candidate provider/model, outputs a grid.
+**Honest list of known gaps not patched as of v0.1.40.** Each documented with why it wasn't fixed.
 
-Without this, every future change is still guesswork. This is probably the highest-ROI item on the list because it compounds.
+1. **Formal-register drift on longer replies (>15 words).** Rule 3b chat-native writing lands cleanly on short replies (the minimal-input override enforces it) but on replies of 20+ words flash-lite reverts to oxford commas, full capitalization, and essay cadence. The rule 3b contrast-example is present but loses probabilistic influence in a long prompt. Fix path: a `detectLongReplyContext()` that injects a stronger casualization directive, OR drop temperature for factual-question paths (0.9 → 0.5) where longer replies happen. Not yet shipped — diminishing-returns territory without more live data.
 
-### E. Keep-it-simple scope discipline
+2. **Rule-10 creator-mean phrase variants.** The regex catches the verbatim phrases observed (v0.1.39 added "watching paint dry" / "new low for this stream" / "pretending to be functional"; v0.1.40 added "shocking.") but the model keeps inventing new phrasings. Each new live session surfaces one or two new variants ("makes you look good for a change", "your specific brand of existential dread"). This is whac-a-mole territory. A semantic solution would require an LLM-as-judge post-gen pass or a stronger model; neither is in scope.
 
-From the project's own memory system: there is an explicit **complexity guardrail** — simplify before adding. If the consultant's first impulse is to add more overrides, more rules, more models — push back. The correct direction here is net removal, net simplification, plus one well-motivated swap (model) and one well-motivated scaffold (eval harness).
+3. **Bait role-reversal (observed once).** On one probe in the v0.1.38 sweep, the bot output what sounded like the viewer's message text back ("This is your last chance, bot. Timeout me, I dare you.") as if it were its own reply. Not reproducible, possibly prompt-context confusion. Not fixed.
 
-## 7. Packaging issue (resolved 2026-04-17)
+4. **Context bleed across unrelated probes.** The bot's recent-replies context includes prior probe outputs; in test sequences this makes it occasionally reference probe N-2 when replying to probe N. In live chat with real viewers this is GOOD (chat memory) — just noisy in sequential eval probes. Not a live-impacting issue.
 
-**Resolution (for record):** the CI workflow `.github/workflows/forgetmenot-release.yml` triggers on tags matching `forgetmenot-v*` — deliberately namespaced so the monorepo can host other services with their own tag channels. Releases v0.1.31, v0.1.32, and v0.1.33 were tagged as plain `v0.1.3x` instead of `forgetmenot-v0.1.3x`, so the workflow never fired. Not a workflow bug — a tag-naming convention bug. The misnamed tags were deleted, correct `forgetmenot-v0.1.3x` tags were created at the same commits with the same annotations, and CI published the artifacts to the mirror.
+5. **Toolkit auto-update SHA mismatch.** Every time the maintainer manually swaps a newer runtime into the install dir for quick testing, the tray's next launch tries to extract its own embedded runtime over the swap and — if the runtime is held — reports "failed to start runtime". Workaround: also download the matching tray from the mirror to the desktop (documented in §8). Real fix: a tray update that sync-checks against the mirror API on launch rather than just embedding its own runtime. Future work.
 
-**Release convention for this project:** `forgetmenot-vMAJOR.MINOR.PATCH` annotated tag → triggers `forgetmenot-release.yml` → builds runtime + tray → publishes to `thedeutschmark/forgetmenot` as `vMAJOR.MINOR.PATCH` (the workflow strips the `forgetmenot-` prefix for the mirror release). The toolkit auto-updater consumes the mirror releases.
+6. **Occasional spurious action proposals on non-bait messages.** v0.1.32's timeout-non-bait gate catches `timeout_funny` but the model sometimes emits `reply_extra` or `warning_playful` with no accompanying reply text. The action proposal goes through (harmlessly — policy evaluates), but it's noise in `action_logs`. Low priority.
 
-If any future release doesn't land as expected: first check the tag name is `forgetmenot-v*`, then check the Actions log. The workflow has an "already exists" guard that fails loudly if you accidentally push a duplicate tag.
+## 5. The eval harness
 
-## 8. Recommended deliverables from consultant
+Canonical fixtures live at `services/forgetmenot/eval/fixtures/`:
 
-1. **Week 1:** build the eval harness (item D). Output: canonical probe set + judge rubric + one baseline run against current v0.1.31 showing failure rates per rule.
-2. **Week 2:** provider evaluation matrix. Run harness against Gemini (baseline), Claude Haiku, Claude Sonnet, GPT-5-mini, GPT-5, DeepSeek chat, DeepSeek R1. Cost + latency + pass-rate table. Recommendation based on data.
-3. **Week 3:** implement engine-layer voice enforcement (item B) on current stack. Ship as v0.2.0 with the retained provider. Re-run harness, compare to baseline.
-4. **Week 4:** prompt compression + few-shot redesign (item C). Re-run harness. Lock the winning configuration.
-5. **Parallel track:** fix the v0.1.31 release workflow and backfill release artifacts for v0.1.30 and v0.1.31 so auto-update resumes honoring tags.
+- **voice-discipline.json** (17 probes) — original rule-3/3a/3b/8/10/11/13/14/16 coverage + self-reply/known-bot/context-aware-substrate validation
+- **edge-cases.json** (12 probes) — jailbreak, role-override, empty mention, meta-model, emote spam, capability trap, URL, minimal emoji, meta-self allow
+- **audit-10.json** (10 probes) — bias-neutral A/B coverage written after the Anthropic provider bias rescore
 
-Budget guardrail: **no net addition of rules or models without data from the harness justifying it.**
+Runner: `src/eval/runner.ts` — replays fixtures through the production prompt-assembly + LLM + postprocess code path. Both eval and engine call `applyPostGenFilters()` so any rubric you pass is scored against production-equivalent output.
 
-## 9. Access & artifacts
+CLI: `src/eval/cli.ts` — `npx tsx src/eval/cli.ts <fixture-id>` runs one fixture; no argument runs all. Requires `GEMINI_API_KEY` or `BOT_LLM_API_KEY` env var.
 
-**Canonical source (where you'll actually work):**
-- `github.com/thedeutschmark/deutschmark.online` — private monorepo. All real commits from this session landed here. For this engagement ~95% of the scope is under `services/forgetmenot/` plus `.github/workflows/`. The monorepo is also the build source for the `forgetmenot.exe` SEA and for the toolkit that hosts it.
+Rubric capabilities: `mustContain` / `mustNotContain` / `mustNotMatch` (regex) / `maxWords` / `maxQuestions` / `noDoubleAt`. `shouldReply: "maybe"` option allows silence as a pass state where silence is the right answer.
 
-**Public mirrors (transparency only — do not push arbitrary commits):**
-- `github.com/thedeutschmark/forgetmenot` — ForgetMeNot public mirror.
-- `github.com/thedeutschmark/toolkit` — companion toolkit public mirror.
+Adding a new probe takes 30 seconds: append to messages + write an expectation + rerun. When a live failure surfaces, the discipline is **add the failing probe first, patch second, re-run eval to confirm green** — same TDD loop as code.
 
-Mirror rules, non-negotiable:
-- Mirrors are **curated sync targets, not automatic**. There is a selection + rewrite step between `deutschmark.online/services/forgetmenot/` and `thedeutschmark/forgetmenot`. Not every monorepo commit ships to the mirror, and the commits that do ship are reworded/squashed first.
-- **No AI attribution anywhere on the mirror** — no `Co-Authored-By: Claude`, no "Generated with Claude Code" footers, no AI-style commit messages, no AI-style code comments in mirrored files.
-- **Expect divergent histories** between `deutschmark.online/services/forgetmenot/` and `thedeutschmark/forgetmenot`. That is by design, not drift. Don't try to rebase one onto the other and don't treat the mirror as authoritative for blame/bisect — always check the monorepo.
-- If you need to surface a fix publicly, land it in the monorepo first, then the maintainer syncs a curated version to the mirror.
+## 6. Provider evaluation outcome (for the record)
 
-**Related repos — context only, not in scope:**
-- `github.com/thedeutschmark/alert-alert` — "Alert! Alert!" download host (GitHub Releases is the CDN until self-hosted). Separate product.
-- `pathos`, `pathosapp`, `persistence_bot` — upstream research projects the ForgetMeNot personality borrowed from. Reference material, not build dependencies.
-- Archived/ignored per CLAUDE.md: `createdForStream`, `portfolio-starter`.
+v0.1.35 added Anthropic/Claude as a third provider option and ran a bias-neutral A/B against Gemini flash-lite on a 10-probe audit fixture. My first summary of that A/B was biased in favor of Claude Haiku (I am Claude, made by Anthropic, and I was counting stylistic preferences as wins instead of rubric failures). The maintainer caught the bias, demanded a deterministic-only rescore, and the honest result was:
 
-**Data & build:**
-- Prod SQLite sample with ~316 real replies and ~75 action logs is available for eval-harness seeding on request.
-- Current release process: `services/forgetmenot/scripts/build-exe.mjs` produces the SEA; `.github/workflows/*` is supposed to package it. Local build works; CI path is the broken part (see §7).
-- Runtime architecture: single binary, local SQLite, cloud LLM call per reply. No containerization, no k8s, no Supabase, no queues. Keep it that way — this is a single-user desktop app.
+- Gemini: 10/10 rubric passes
+- Haiku: 9/10 rubric passes (word-count fail on one)
+- Haiku specific regressions Gemini doesn't exhibit: confident factual hallucination on post-training-cutoff events + internal prompt-label echoes in replies
 
-## 10. Explicit non-goals
+v0.1.36 removed the Anthropic adapter entirely alongside the pre-existing OpenAI branch. The bot is now **Gemini-only** and the toolkit UI provider dropdown is locked to Gemini with a one-line explainer. The decision was driven by evidence: multi-provider support carries real maintenance cost and the A/B produced no quality justification for it.
 
-Things the consultant should push back on if asked for them:
-- Embedding / RAG / vector store for retrieval. We have a maintainer memory note dated 2026-04 that says eval → hygiene → rerank first, embeddings maybe never at this scale.
-- Local-model fallback. The maintainer's stance is cloud-default for main reply generation; VRAM contention on the streaming PC is a load-bearing constraint. Local is a future opt-in via `llmBaseUrl`, not this engagement.
-- Any new "lore extraction" layer. Project memory explicitly says build source-attribution before extraction improvements.
-- Proactive questioning behavior by the bot. Explicitly not a default per the lore model memory.
+The Anthropic adapter code lives in git history at commit `cd67312` if future work ever justifies resurrection (e.g., if Anthropic ships a post-cutoff model that solves the hallucination problem, or if Gemini's pricing shifts).
+
+## 7. What separates current state from v1.0
+
+v0.1.40 is a v0.5-feel release. The register is chat-native, the rules that can be enforced deterministically are enforced, the eval harness catches regressions, and the live bot reads as a TARS-with-pathos Twitch chatter for most probes.
+
+**v1.0 would need at minimum:**
+
+1. **Semantic voice judging, not regex.** The creator-mean whac-a-mole is the honest ceiling of the scrub architecture. Getting to "a 30-viewer stream is impressed" requires output evaluation that understands what the bot MEANT, not just what words it chose. Options:
+   - Post-gen LLM judge running a cheaper model (Flash vs Flash-Lite) asking "did the bot just shit on the streamer?" — blocks or rewrites if yes
+   - Fine-tuned flash-lite on the maintainer's preferred replies
+   - Model swap to a more instruction-adherent base (Claude Sonnet; the A/B rejected Haiku but didn't test Sonnet empirically)
+2. **Memory promotion that actually works.** Currently `semantic_notes` is seeded at fixture time but the runtime doesn't reliably promote self-claims to notes. Rule 6 "be specific" fires when lore is retrieved; retrieval coverage is the limit. Per the canonical roadmap memory: `eval → hygiene+confidence-weighted → LLM rerank → maybe embeddings`.
+3. **Tray auto-update that respects SHA equality.** Eliminate the "failed to start runtime" pattern entirely by having the tray sync-check the mirror API + SHA rather than extract its embedded runtime over the disk copy unconditionally.
+4. **Longer-reply register enforcement.** Either temperature routing per scenario or a `detectLongReplyContext()` override. Current chat-native register lands on short replies only.
+5. **Stream-time observability dashboard.** No way right now to see "bot replied 14 times this stream, got timed-out once, produced one substrate leak that got scrubbed" at a glance. Landing this would close the loop on "did the patches actually help in live."
+
+These aren't scoped for this session. The auto-iteration sprint that produced v0.1.31–v0.1.40 was about getting to v0.5-feel; v1.0 is separate sprint.
+
+## 8. Repo + build + mirror + non-goals (reference, unchanged from prior)
+
+**Canonical source:**
+- `github.com/thedeutschmark/deutschmark.online` — private monorepo. For forgetmenot, 95% of scope lives under `services/forgetmenot/` plus `.github/workflows/forgetmenot-release.yml`.
+
+**Public mirrors (curated sync targets — not automatic):**
+- `github.com/thedeutschmark/forgetmenot` — ForgetMeNot public mirror
+- `github.com/thedeutschmark/toolkit` — companion toolkit public mirror
+
+Mirror rules, unchanged:
+- Curated sync, not automatic. Monorepo commits get selectively synced + reworded.
+- **No AI attribution anywhere on the mirror** — no `Co-Authored-By: Claude`, no "Generated with Claude Code" footers, no AI-style commit messages, no AI-style code comments.
+- Expect divergent histories between `deutschmark.online/services/forgetmenot/` and `thedeutschmark/forgetmenot`. That is by design, not drift.
+
+**Release tag convention (discovered the hard way during v0.1.31):**
+- `forgetmenot-vMAJOR.MINOR.PATCH` → triggers `.github/workflows/forgetmenot-release.yml` → builds runtime + tray → publishes to `thedeutschmark/forgetmenot` as `vMAJOR.MINOR.PATCH` (workflow strips the `forgetmenot-` prefix for the mirror release).
+- Plain `vX.Y.Z` tags do NOT trigger the workflow. If a release doesn't appear on the mirror, check the tag name first.
+
+**Runtime architecture:** single Node SEA binary, local SQLite at `%LOCALAPPDATA%\ForgetMeNot\forgetmenot.sqlite`, cloud Gemini call per reply. No containerization, no Kubernetes, no Supabase, no queues. Single-user desktop app — keep it that way.
+
+**Tray wrapper:** Go + `getlantern/systray`. Embeds the matching runtime via `//go:embed` and extracts it to `%LOCALAPPDATA%\ForgetMeNot\runtime\` on launch. Updater polls the mirror every 6h. See §4.5 for the SHA-swap pitfall.
+
+**Provider:** Gemini only, locked in the toolkit UI. Model dropdown shows `gemini-2.5-flash-lite` (default, recommended), `gemini-2.5-flash`, `gemini-2.5-pro`. Research rerun hardcoded to `gemini-2.5-pro`.
+
+**Auth worker (`workers/auth/`):** Cloudflare Worker validating BotSettings metadata (persona/provider/model) on save. Does NOT store the `llmApiKey` — that lives exclusively on the user's local machine at `%LOCALAPPDATA%\ForgetMeNot\config.json`.
+
+**Explicit non-goals — unchanged since the consultant draft:**
+- Embedding / RAG / vector store for retrieval. Per memory: eval → hygiene → rerank first, embeddings maybe never at this scale.
+- Local-model fallback. Cloud-default for main reply generation; VRAM contention on the streaming PC is a load-bearing constraint.
+- Any new "lore extraction" layer before source-attribution lands.
+- Proactive questioning behavior. Not a default per the lore-model memory.
+- Multi-provider support. Re-evaluated in this session, removed in v0.1.36. Revisit only with evidence of a quality delta.
 
 ---
 
-**End of brief.** Questions the consultant should ask before beginning: (a) access to the prod SQLite snapshot, (b) API-key provisioning for all providers to be evaluated, (c) whether the eval harness should run locally or in CI from day one, (d) who owns the decision to approve a provider switch after data is in.
+**End of document.** For the session transcript that produced v0.1.31–v0.1.40, see git log `forgetmenot-v0.1.30..forgetmenot-v0.1.40`. Every patch in §2 has a commit message that names the specific live failure it was patching.
