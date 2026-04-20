@@ -7,6 +7,7 @@ import { handleWizardRequest } from "./wizard.js";
 import { applyCors, handlePreflight } from "./cors.js";
 import { handleControlRequest } from "./control.js";
 import { isPaused, getEngineMode } from "../reply/engine.js";
+import { VERSION } from "../version.js";
 import type { LocalConfig } from "../runtime/config.js";
 
 export interface HealthStatus {
@@ -179,7 +180,7 @@ function getHealth(): HealthStatus {
     llmKeyConfigured: _llmKeyConfigured,
     replyMode: _localConfig?.replyMode ?? null,
     timeoutMode: _localConfig?.timeoutMode ?? null,
-    version: "0.1.41",
+    version: VERSION,
     issues,
   };
 }

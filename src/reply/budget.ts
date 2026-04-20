@@ -463,6 +463,19 @@ export function assemblePrompt(
     : false;
   const creatorFrame = isCreator ? buildCreatorFrame(settings.creatorRelationship, effectiveBotName, broadcasterLogin!) : "";
 
+  // Shared constraint lines — reused across the prescriptive-shape
+  // overrides below (distress / command / help / minimal). Extracted
+  // 2026-04-20: before this, each override re-listed the same banned-
+  // opener + /me bans, which meant any future addition had to land in
+  // 4 places. Keeping them here also guarantees the constraint text is
+  // BYTE-IDENTICAL across overrides, which matters for prompt-cache hits
+  // when multiple overrides stack.
+  //
+  // baitOverride stays a single-sentence shape (doesn't use the bullet
+  // list) so it doesn't fold into this pattern.
+  const BANNED_OPENERS_LINE = "- Do NOT open with \"Oh,\", \"Well,\", \"Ah,\", \"So,\", \"Fine,\" or any stage-setter.";
+  const NO_ME_STAGE_LINE = "- Do NOT use /me or stage direction (\"sighs\", \"shrugs\", \"leans in\").";
+
   // Bait override — if the current message explicitly demands a timeout
   // AND fun moderation is enabled, inject a hard instruction. LLMs (esp.
   // gemini) are trained to refuse weapon-like actions even when asked
@@ -492,7 +505,8 @@ export function assemblePrompt(
       ? [
           "PATHOS GATE ACTIVE. The viewer just said something that reads as real distress. Follow HARD RULE 14 exactly:",
           "- Reply with ONE flat sentence, 6 words or fewer.",
-          "- Do NOT open with \"Oh,\", \"Well,\", \"Ah,\", \"So,\", or any stage-setter.",
+          BANNED_OPENERS_LINE,
+          NO_ME_STAGE_LINE,
           "- Do NOT ask a follow-up question (\"you okay?\", \"what happened?\").",
           "- Do NOT reframe as a joke or dunk on their day.",
           "- Do NOT append any [ACTION:...] block — the moment does not call for moderation.",
@@ -519,8 +533,8 @@ export function assemblePrompt(
       ? [
           "COMMAND MODE ACTIVE. The broadcaster just gave you an operational directive. Follow HARD RULE 16 exactly:",
           "- Reply with ONE brief acknowledgment, 4 words or fewer.",
-          "- Do NOT open with \"Oh,\", \"Well,\", \"Ah,\", \"So,\", \"Fine,\", or any stage-setter.",
-          "- Do NOT use /me or any stage direction (\"sighs\", \"pipes down\", \"leans in\").",
+          BANNED_OPENERS_LINE,
+          NO_ME_STAGE_LINE,
           "- Do NOT add \"fine, fine\", \"if I must\", \"just try not to\", or any performative-resistance flavor.",
           "- Do NOT ask a follow-up question, add a trailing clause, or negotiate.",
           "- Do NOT append any [ACTION:...] block unless the ask explicitly names one.",
@@ -557,6 +571,8 @@ export function assemblePrompt(
       ? [
           "HELP REQUEST FROM THE BROADCASTER. They asked for genuine input — suggestions, recommendations, or a real opinion. Drop the sardonic deflection register and actually answer (HARD RULE 8 + 10).",
           "- Give a REAL suggestion or take, one short sentence, specific not generic.",
+          BANNED_OPENERS_LINE,
+          NO_ME_STAGE_LINE,
           "- Do NOT open with a rhetorical question about why they're asking.",
           "- Do NOT deflect with \"you want my suggestions?\" / \"why are you asking me?\" / \"how about you do X yourself\" shapes — that reads as dismissive.",
           "- Do NOT imply they ask too much, can't decide themselves, or should know already.",
@@ -580,8 +596,8 @@ export function assemblePrompt(
       ? [
           "MINIMAL INPUT. The viewer sent a one- to three-word message. Match the energy: your reply should also be 1-3 words, 5 absolute max.",
           "- Do NOT add philosophy, commentary, analysis, or rhetorical questions.",
-          "- Do NOT open with \"Oh,\", \"Well,\", \"Ah,\", \"So,\", \"Fine,\".",
-          "- Do NOT use /me or stage direction.",
+          BANNED_OPENERS_LINE,
+          NO_ME_STAGE_LINE,
           "- Chat-native register is mandatory here (rule 3b): lowercase, no period required on short replies.",
           "- Examples of the right shape: \"yo\"→\"yo\" / \"sup\"→\"not much u?\" / \"hey\"→\"hey\" / \"thanks\"→\"anytime\" / \"ping\"→\"pong\" / \"lol\"→\"lol\" / \"ok\"→\"k\" / \"cool\"→\"yup\".",
           "- Pick one short reply. Overtalking a minimal input is the top chatbot tell.",
@@ -621,7 +637,16 @@ export function assemblePrompt(
     ? baseThinkingFrame + forceResearchAmendment
     : "";
 
-  const systemContent = [timeAnchor, persona, rules, creatorFrame, baitOverride, distressOverride, commandOverride, helpOverride, minimalOverride, thinkingFrame, actionSchema].filter(Boolean).join("\n\n");
+  // Assembly order — STABLE tier first (maximizes prompt-cache hit rate),
+  // then volatile overrides, then message-specific framing, then action
+  // schema. Cache analysis 2026-04-20: creatorFrame used to sit between
+  // `rules` and the overrides, which forked the cacheable prefix between
+  // broadcaster messages (prefix ends after creatorFrame) and viewer
+  // messages (prefix ends at rules). Moving creatorFrame PAST the
+  // overrides makes `[timeAnchor, persona, rules]` a unified stable
+  // prefix for every message regardless of speaker — one cache key
+  // instead of two, same 5-minute TTL window.
+  const systemContent = [timeAnchor, persona, rules, baitOverride, distressOverride, commandOverride, helpOverride, minimalOverride, creatorFrame, thinkingFrame, actionSchema].filter(Boolean).join("\n\n");
 
   // ── User message body, stable-first ──
   // Start with full context; drop in priority order if over budget.

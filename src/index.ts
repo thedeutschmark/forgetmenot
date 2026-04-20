@@ -27,10 +27,11 @@ import { initEngine, updateBundle } from "./reply/engine.js";
 import { setRuntimeContext } from "./actions/executor.js";
 import { startCompaction, updateCompactionBundle, stopCompaction, flushCurrentSessionForShutdown } from "./memory/compaction.js";
 import { hideConsoleWindowIfRequested } from "./runtime/console-visibility.js";
+import { VERSION } from "./version.js";
 import type { TimeoutMode } from "./actions/helix.js";
 
 async function main() {
-  console.log("[forgetmenot] ForgetMeNot v0.1.41");
+  console.log(`[forgetmenot] ForgetMeNot v${VERSION}`);
 
   // 1. Load local config (CLI override: --data-dir "path")
   const dataDirArg = process.argv.find((a) => a.startsWith("--data-dir="))?.split("=")[1]
