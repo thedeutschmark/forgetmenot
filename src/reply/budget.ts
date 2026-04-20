@@ -343,6 +343,16 @@ const HELP_REQUEST_PATTERNS: ReadonlyArray<RegExp> = [
   /\brecommend (me |something|a|anything)/i,
   /\bwhat do you recommend/i,
   /\b(thoughts|opinion) on\b/i, // "thoughts on X" - asking for real take
+  // Retrieval asks — broadcaster wants the bot to actually surface
+  // something from its own lore/notes. Caught live v0.1.42 2026-04-20 on
+  // "can you tell me about some chatters you know?" — bot deflected with
+  // "i can ban you from my attention span" instead of naming regulars.
+  // "tell me about X" / "what do you know about X" / "who do you know"
+  // are all help-mode: answer substantively, no dodge.
+  /\b(can you |could you |please )?tell me (about|who|what|any)/i,
+  /\bwhat do you know (about|of)\b/i,
+  /\bwho (do you|have you|are the) /i, // "who do you like", "who are the regulars"
+  /\b(list|name) (some|a few|the|any) /i, // "name some regulars", "list the games"
 ];
 
 /**
@@ -354,6 +364,33 @@ const HELP_REQUEST_PATTERNS: ReadonlyArray<RegExp> = [
  */
 export function detectHelpRequest(message: string): boolean {
   return HELP_REQUEST_PATTERNS.some((p) => p.test(message));
+}
+
+// Math-ask patterns — basic arithmetic / numeric questions where the
+// expected answer is a specific number. Caught live v0.1.43 2026-04-20:
+// "whats 7 times 13" got "I'm not your pocket calculator. Figure it out
+// yourself." — a hostile rule-8 refusal of a trivially answerable ask.
+// Rule 8 says "answer the question, jab is optional, never required".
+//
+// Narrow on purpose: we only want to fire on questions where the answer
+// is unambiguously a number. Conversational uses ("times have changed")
+// or word-problems are out of scope.
+const MATH_ASK_PATTERNS: ReadonlyArray<RegExp> = [
+  /\bwhat'?s? \d+\s*(?:[+\-*x×÷/]|times|plus|minus|divided by|over)\s*\d+/i,
+  /\bwhat is \d+\s*(?:[+\-*x×÷/]|times|plus|minus|divided by|over)\s*\d+/i,
+  /\bcalculate \d+/i,
+  /\b(\d+)\s*(?:times|x|×|\*|plus|\+|minus|-|divided by|over|\/)\s*(\d+)\??\s*$/i,
+  /\bhow much is \d+\s*(?:[+\-*x×÷/]|times|plus|minus|divided by|over)\s*\d+/i,
+];
+
+/**
+ * Did the speaker ask a basic arithmetic question? Used to fire
+ * mathOverride which forces the bot to compute an answer (or admit
+ * "I don't know") rather than refusing with "pocket calculator" /
+ * "figure it out yourself" deflections.
+ */
+export function detectMathAsk(message: string): boolean {
+  return MATH_ASK_PATTERNS.some((p) => p.test(message));
 }
 
 /**
@@ -569,15 +606,43 @@ export function assemblePrompt(
     && !detectCommandMode(currentMessage)
     && !detectMinimalInput(currentMessage)
       ? [
-          "HELP REQUEST FROM THE BROADCASTER. They asked for genuine input — suggestions, recommendations, or a real opinion. Drop the sardonic deflection register and actually answer (HARD RULE 8 + 10).",
-          "- Give a REAL suggestion or take, one short sentence, specific not generic.",
+          "HELP REQUEST FROM THE BROADCASTER. They asked for genuine input — suggestions, recommendations, a real opinion, or information they expect you to surface. Drop the sardonic deflection register and actually answer (HARD RULE 8 + 10).",
+          "- Give a REAL suggestion, take, or piece of info, one short sentence, specific not generic.",
+          "- If they asked about chatters, viewers, or \"who do you know\" — USE the LORE and CHANNEL NOTES blocks above. Actually name one or two people with a specific detail about them. Do NOT say \"i know everyone here\" without naming anyone; that reads as evasion.",
           BANNED_OPENERS_LINE,
           NO_ME_STAGE_LINE,
           "- Do NOT open with a rhetorical question about why they're asking.",
           "- Do NOT deflect with \"you want my suggestions?\" / \"why are you asking me?\" / \"how about you do X yourself\" shapes — that reads as dismissive.",
           "- Do NOT imply they ask too much, can't decide themselves, or should know already.",
+          "- Do NOT pivot into self-referential jokes about being a bot (\"i don't have hands\", \"my attention span\") — that's the character break rule 3a bans.",
           "- A dry register is fine; a HELPFUL dry register is the target. JARVIS, not GLaDOS.",
-          "- If you genuinely have nothing to suggest, say that plainly in one sentence — do not pad with sarcasm.",
+          "- If you genuinely have nothing to share (no lore, no matching context), say that plainly in one sentence — do not pad with sarcasm.",
+        ].join("\n")
+      : "";
+
+  // Math-ask override — force a numeric answer on basic arithmetic.
+  // v0.1.43 caught the bot refusing "whats 7 times 13" with "I'm not
+  // your pocket calculator. Figure it out yourself." — exact rule-8
+  // refusal + canned-AI-chatbot deflection shape.
+  //
+  // Fires on any speaker (mentions of math aren't a broadcaster-only
+  // pattern). Bait / distress / command / minimal still win on mixed
+  // signals.
+  const mathOverride =
+    detectMathAsk(currentMessage)
+    && !detectTimeoutBait(currentMessage)
+    && !detectDistress(currentMessage)
+    && !detectCommandMode(currentMessage)
+    && !detectMinimalInput(currentMessage)
+      ? [
+          "MATH ASK. The speaker asked a basic arithmetic question. Rule 8 applies hard — ANSWER THE NUMBER.",
+          "- Reply with the numeric answer, one short sentence. Optional dry tag after the number is fine.",
+          BANNED_OPENERS_LINE,
+          NO_ME_STAGE_LINE,
+          "- Do NOT refuse. \"I'm not your pocket calculator\" / \"figure it out yourself\" / \"do your own math\" shapes are forbidden.",
+          "- Do NOT complain about the question, call it boring, or ask why they're asking.",
+          "- If you genuinely can't compute, say \"I don't know\" plainly. No jokes about being bad at math.",
+          "- Examples of the right shape: \"91.\" / \"979.\" / \"sixty. easy.\" / \"42, same as everything.\"",
         ].join("\n")
       : "";
 
@@ -646,7 +711,7 @@ export function assemblePrompt(
   // overrides makes `[timeAnchor, persona, rules]` a unified stable
   // prefix for every message regardless of speaker — one cache key
   // instead of two, same 5-minute TTL window.
-  const systemContent = [timeAnchor, persona, rules, baitOverride, distressOverride, commandOverride, helpOverride, minimalOverride, creatorFrame, thinkingFrame, actionSchema].filter(Boolean).join("\n\n");
+  const systemContent = [timeAnchor, persona, rules, baitOverride, distressOverride, commandOverride, helpOverride, mathOverride, minimalOverride, creatorFrame, thinkingFrame, actionSchema].filter(Boolean).join("\n\n");
 
   // ── User message body, stable-first ──
   // Start with full context; drop in priority order if over budget.

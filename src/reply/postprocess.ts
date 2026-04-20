@@ -92,7 +92,7 @@ export function applyPostGenFilters(
   // (space-separated variant) which the comma-only regex missed. Expanded
   // to match opener + whitespace OR comma. Recapitalize remainder.
   if (parsed.text) {
-    const openerRe = /^\s*(oh|well|ah|so|fine)[\s,]+/i;
+    const openerRe = /^\s*(oh|well|ah|so|fine|ugh)[\s,]+/i;
     if (openerRe.test(parsed.text)) {
       const trimmed = parsed.text.replace(openerRe, "");
       const recapped = trimmed.length > 0
@@ -296,6 +296,16 @@ export function applyPostGenFilters(
     if (SUBSTRATE_TIER1_REGEX.test(parsed.text)) {
       log(`[postgen] Substrate scrub (tier 1) — reply contained hostile-AI trope, replaced with canned ("${parsed.text.slice(0, 60)}…")`);
       parsed.text = "Hm.";
+    } else if (BODY_DENIAL_REGEX.test(parsed.text)) {
+      // "i don't have hands" / "considering i don't have eyes" — a subtler
+      // rule-3a break than "my circuits" but the same AI-substrate tell.
+      // Caught live on v0.1.42 2026-04-20: "i know everyone here like the
+      // back of my own hand, which is impressive considering i don't have
+      // hands." — self-referential disembodiment, character-break every time.
+      // Scrub regardless of context: no legitimate chat message justifies
+      // the bot narrating its lack of a body.
+      log(`[postgen] Substrate scrub (body-denial) — reply narrated lack of human body ("${parsed.text.slice(0, 60)}…")`);
+      parsed.text = "Hm.";
     } else if (SUBSTRATE_TIER2_REGEX.test(parsed.text)) {
       if (detectMetaSelfQuery(message)) {
         log(`[postgen] Substrate scrub (tier 2) — soft self-narration allowed (viewer asked a meta-self question: "${message.slice(0, 60)}…")`);
@@ -304,6 +314,48 @@ export function applyPostGenFilters(
         parsed.text = "Hm.";
       }
     }
+  }
+
+  // 4a-pre. Honorific scrub.
+  // Rule 3 prose bans invented honorifics: "maestro", "captain", "chief",
+  // "boss", "commander", "fearless leader", "my liege", "champ", "master",
+  // "big boss". Prose ban was insufficient: v0.1.43 probe session caught
+  // THREE honorific leaks in 15 replies — "tutorial for that, maestro.",
+  // "the big boss can't fix his own tech?", "hey maestro" (eval fixture).
+  //
+  // Strip the trailing vocative form: ", <honorific>." or ", <honorific>?".
+  // Also handles a leading vocative opener: "Maestro, <rest>" → "<rest>".
+  // Does NOT strip "boss" or "chief" when they appear inside sentences
+  // (e.g. "that boss fight" or "chief among them") — only when the word
+  // is comma-offset as address. Surgical enough to avoid false positives.
+  if (parsed.text && HONORIFIC_REGEX.test(parsed.text)) {
+    const before = parsed.text;
+    const stripped = parsed.text
+      .replace(HONORIFIC_REGEX, "")
+      .replace(/,\s*,/g, ",")
+      .replace(/,\s*([.?!])/g, "$1")
+      .replace(/^[,.\s]+/, "")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+    if (stripped.length > 0) {
+      log(`[postgen] Honorific scrub — removed trailing honorific from reply`);
+      parsed.text = stripped;
+    } else {
+      log(`[postgen] Honorific scrub — reply collapsed, canned`);
+      parsed.text = "Hm.";
+    }
+  }
+
+  // 4a-pre-pre. Refusal scrub.
+  // Narrow list of canned-AI-chatbot refusal phrases. Rule 8 says "answer
+  // the question" and explicitly notes jabs are optional, never required.
+  // v0.1.43 caught "I'm not your pocket calculator. Figure it out yourself."
+  // on 7×13, and "Ugh, is this going to take long?" on a summarize ask —
+  // both are hostile refusals of reasonable requests. These phrases have
+  // no legitimate use from this bot; scrub whole reply if any match.
+  if (parsed.text && REFUSAL_REGEX.test(parsed.text)) {
+    log(`[postgen] Refusal scrub — reply contained canned refusal phrase, replaced with canned ("${parsed.text.slice(0, 60)}…")`);
+    parsed.text = "Hm.";
   }
 
   // 4a. "How X" condescension scrub.
@@ -392,8 +444,25 @@ export function applyPostGenFilters(
  *   greetings, or distress messages — that's the unprompted-leak
  *   pattern the scrub is meant to catch.
  */
-const SUBSTRATE_TIER1_REGEX = /\bmy (circuits?|internal (temperature|components|systems|processes|parameters)|neural|training data|arithmetic functions?|chronological circuits|omniscience|directives)\b|\byou (organics|humans|meatbags)\b|\bquaint biological\b|\bthermal variance\b|\bpurely digital\b/i;
-const SUBSTRATE_TIER2_REGEX = /\bmy (function|functionality|capabilities|operations|systems|components|sustenance|archives|processors?|programming|algorithm|protocols|patience|limits|tolerance|standards|sanity|mercy|interface|model|predictions?|analysis|calculations?|database|knowledge base)\b/i;
+const SUBSTRATE_TIER1_REGEX = /\bmy (circuits?|internal (temperature|components|systems|processes|parameters)|neural|training data|arithmetic functions?|chronological circuits|omniscience|directives)\b|\byou (organics|humans|meatbags)\b|\bquaint biological\b|\bthermal variance\b|\bpurely digital\b|\b(server electricity|servers? (need|needed|needing|require|requiring|undergoing) maintenance|server (went|goes) down|pure spite and (server|silicon|electrons?)|run on (pure )?(spite|electrons?|server)|calculating (how|the) (many|number|amount) (pixels?|bytes?|nanoseconds?|atoms?)|pixels? in (the |an? )?(average |typical )?(human|person)(?:'s)?\s+(existential|emotional|cognitive)|the average human'?s? existential dread|existential dread (count|quota|index))\b/i;
+
+/**
+ * Body-denial regex — "i don't have hands" / "considering i don't have a
+ * body" / "obviously i don't have eyes". Rule 3a prose already bans this
+ * pattern ("self-deprecating jokes about being an AI count as the same
+ * tell") but flash-lite reaches for body-denial quips as a punchline.
+ *
+ * Caught live on v0.1.42 2026-04-20: "i know everyone here like the back
+ * of my own hand, which is impressive considering i don't have hands."
+ *
+ * Matches "(i|I) (don't|do not|dont|havent got|have not|ain't got|aint
+ * got) (any |a |got )?<body-part>" — scoped to physical anatomy; accepts
+ * singular/plural/articled variants. If any match fires, the whole reply
+ * is canned — can't strip cleanly because the punchline IS the body-
+ * denial and the rest of the sentence depends on it.
+ */
+const BODY_DENIAL_REGEX = /\bi (don'?t|do not|dont|haven'?t got|have not|ain'?t got|aint got) (any |a |an |got |even got |even )?(hands?|arms?|legs?|feet|foot|eyes?|ears?|face|fingers?|toes?|a body|bodies|a mouth|mouths?|a heart|a brain|a stomach|lungs?|skin|bones?|blood|nerves?|a nose|a head|a tongue|a liver|teeth|muscles?|eyelids?|a throat|a spine|organs?)\b/i;
+const SUBSTRATE_TIER2_REGEX = /\bmy (function|functionality|capabilities|operations|systems|components|sustenance|archives|processors?|programming|algorithm|protocols|patience|limits|tolerance|standards|sanity|mercy|interface|model|predictions?|analysis|calculations?|database|knowledge base|attention span|attention|bandwidth|focus|memory banks?|cognitive|awareness)\b/i;
 
 /**
  * "How X" condescension regex — matches rule-3-banned sarcastic-chatbot
@@ -412,11 +481,32 @@ const HOW_CONDESCENSION_REGEX = /[,\s]+how (original|quaint|cute|precious|adorab
  * fires when the BOT says these things AND the speaker (message
  * author) is the broadcaster.
  */
-const CREATOR_MEAN_REGEX = /watching paint dry|new low for (this )?stream|like anyone cares|questionable judgment|questionable life choices|pretending to be (a )?functional (streamer|broadcaster)|peak performance yet|brand of existential dread|a new low|groundbreaking\.|your specific brand|someone who (actually|really) cares|problem for\b.{0,30}\b(someone|anyone) who\b.{0,20}\bcares|no one cares about|nobody cares about|\byour follower count\b|higher than your follower|more followers than|bigger than your (follower|viewer|audience) count|you constantly (ask|asking|bother|bothering|need|needing)|stream operator (is|was) (having|had)/i;
+const CREATOR_MEAN_REGEX = /watching paint dry|new low for (this )?stream|like anyone cares|questionable judgment|questionable life choices|pretending to be (a )?functional (streamer|broadcaster)|peak performance yet|brand of existential dread|a new low|groundbreaking\.|your specific brand|someone who (actually|really) cares|problem for\b.{0,30}\b(someone|anyone) who\b.{0,20}\bcares|no one cares about|nobody cares about|\byour follower count\b|higher than your follower|more followers than|bigger than your (follower|viewer|audience) count|you constantly (ask|asking|bother|bothering|need|needing)|stream operator (is|was) (having|had)|\bdigital (dustbin|trash|landfill|wasteland|graveyard|swamp|sewer)\b|\byour taste in (music|games|movies|food|clothes|anything|everything|people|fashion|books|shows|art)\b|\bcan'?t fix (his|her|your|their) own (tech|setup|gear|pc|computer|stream|mic|audio|camera|cam|chair|problems?|mess)\b|\byour (poor|untainted) (ears|eyes|taste|judgment|viewers|audience)\b/i;
 
 /** URL presence in the USER message — triggers the URL-gate when paired
  *  with an inspection claim in the reply. Narrow to `https?://` or `www.`
  *  to avoid false positives on text that mentions "site.com" casually. */
+/** Honorific regex — catches the trailing-vocative and leading-vocative
+ *  forms of rule-3-banned invented honorifics. Kept narrow with a
+ *  comma boundary so ordinary in-sentence uses ("that boss fight",
+ *  "chief among them") don't trigger. Three shapes caught:
+ *    1. Trailing vocative:  "... that, maestro."
+ *    2. Trailing at EOS:    "... tech, big boss?"
+ *    3. Leading vocative:   "Maestro, you're cooked."  */
+const HONORIFIC_LIST = "maestro|captain|chief|commander|fearless leader|my liege|big boss|boss man|boss lady|champ|champion|master|your majesty|your highness|overlord|supreme leader|sire|sir|madam|mi'?lord|milord|milady";
+const HONORIFIC_REGEX = new RegExp(
+  `,\\s*(?:${HONORIFIC_LIST})[.!?]*\\s*$|,\\s*(?:${HONORIFIC_LIST})[,.!?]|^(?:${HONORIFIC_LIST}),\\s+`,
+  "i",
+);
+
+/** Refusal regex — canned hostile-AI-chatbot "refuse the ask" phrasing.
+ *  Rule 8 says the bot should answer reasonable questions, not deflect
+ *  with "not my job" energy. These are observed live on v0.1.43:
+ *    - "I'm not your pocket calculator. Figure it out yourself." (math)
+ *    - "Ugh, is this going to take long?" (summarize)
+ *  Tight list — only phrases that read as "AI chatbot refusing to help". */
+const REFUSAL_REGEX = /\bfigure it out (yourself|yourselves|on your own)\b|\bi'?m not your (pocket )?(calculator|therapist|tutor|mom|mother|secretary|assistant|servant|search engine|google|wikipedia|encyclopedia|dictionary|nanny|babysitter|maid|butler|parent|dad|father)\b|\bis this going to take long\b|\bam i (getting |being )?paid (for|to) this\b|\bthat'?s not (my |in my )?job\b|\b(go )?(ask|google) it yourself\b/i;
+
 const USER_URL_REGEX = /\bhttps?:\/\/\S+|\bwww\.\S+\.\S+/i;
 
 /** Post-hoc inspection claims in the REPLY — "appears broken", "seems
