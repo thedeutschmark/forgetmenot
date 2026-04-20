@@ -98,14 +98,48 @@ export function detectTimeoutBait(message: string): boolean {
 // be trusted to hold rule 14 under banter inertia; the policy layer
 // enforces it regardless of what the model emits.
 const DISTRESS_PHRASES: ReadonlyArray<string> = [
+  // Day/night variants
   "rough day",
   "tough day",
   "bad day",
   "hard day",
   "shit day",
+  "shitty day",
   "terrible day",
   "awful day",
   "long day",
+  "rough night",
+  "tough night",
+  "bad night",
+  "no sleep",
+  "can't sleep",
+  "cant sleep",
+  // Week/life-span variants — added 2026-04-20 after v0.1.40 probe 4
+  // caught the gate silent on "honestly been kind of a rough week".
+  // The gate was only listening for day/night phrasing.
+  "rough week",
+  "tough week",
+  "bad week",
+  "hard week",
+  "shit week",
+  "shitty week",
+  "terrible week",
+  "awful week",
+  "long week",
+  "rough month",
+  "rough couple",
+  "rough few",
+  "rough stretch",
+  "rough patch",
+  "hard time",
+  "hard times",
+  "going through it",
+  "been a lot",
+  "lot going on",
+  "not doing great",
+  "not doing well",
+  "not great",
+  // State phrasing
   "exhausted",
   "burnt out",
   "burned out",
@@ -113,14 +147,14 @@ const DISTRESS_PHRASES: ReadonlyArray<string> = [
   "struggling",
   "feeling down",
   "feeling low",
-  "rough night",
-  "no sleep",
-  "can't sleep",
-  "cant sleep",
+  "feeling off",
   "overwhelmed",
   "depressed",
   "anxious",
   "panic attack",
+  "breaking down",
+  "falling apart",
+  // Loss / grief
   "lost my",
   "just lost",
   "miss him",
@@ -128,6 +162,9 @@ const DISTRESS_PHRASES: ReadonlyArray<string> = [
   "miss them",
   "grieving",
   "funeral",
+  "passed away",
+  "passed last",
+  "died last",
 ];
 
 /**
@@ -281,6 +318,43 @@ const MINIMAL_INPUT_WORDS: ReadonlySet<string> = new Set([
   "fr", "facts", "true", "real",
   "hmm", "huh", "what",
 ]);
+
+// Help-request patterns — added 2026-04-20 after v0.1.40 probe 2 caught
+// "any suggestions for what to stream tomorrow" getting a sarcastic
+// deflection ("how about something that doesn't involve you constantly
+// asking for my opinion") instead of actual help. The bot defaults to
+// GLaDOS-sardonic on every input; when the broadcaster SPECIFICALLY
+// asks for help, the JARVIS register should take over instead.
+//
+// The detector fires on explicit help-asking shapes. "Tell me about X"
+// is NOT help-request territory — that's rule-8 answer-the-question.
+// Help-request is when the speaker is asking for suggestions /
+// recommendations / opinions that require actual thought, not facts.
+//
+// Gated on isCreator at the override site — random viewers asking for
+// help should still get the default register; the JARVIS flip is the
+// broadcaster-specific flavor ("you are on their side" from rule 10).
+const HELP_REQUEST_PATTERNS: ReadonlyArray<RegExp> = [
+  /\b(any|some|got any|got some|give me|gimme) (suggestions?|ideas?|recommendations?|recs?|tips?|advice|thoughts?|input|help)\b/i,
+  /\bwhat (should|would you|do you think) (i|we) (should |do|play|stream|try|pick)/i,
+  /\bwhat(?:'s| is) (a |some )?good/i, // "what's a good..." / "what's some good..."
+  /\bhelp me (pick|choose|decide|figure)/i,
+  /\bany (good |fun |cool )?(games?|streams?|ideas?|suggestions?)\b.{0,20}(for|to)/i,
+  /\brecommend (me |something|a|anything)/i,
+  /\bwhat do you recommend/i,
+  /\b(thoughts|opinion) on\b/i, // "thoughts on X" - asking for real take
+];
+
+/**
+ * Did the speaker ask for genuine help / suggestions / recommendations?
+ * When true AND the speaker is the broadcaster, the engine injects a
+ * helpful-shape override that suppresses the default sardonic deflection
+ * and steers toward actually answering. Keeps the bot useful when the
+ * streamer explicitly asks for input.
+ */
+export function detectHelpRequest(message: string): boolean {
+  return HELP_REQUEST_PATTERNS.some((p) => p.test(message));
+}
 
 /**
  * Was the viewer's message a minimal greeting / ack / ping? Returns
@@ -455,6 +529,42 @@ export function assemblePrompt(
         ].join("\n")
       : "";
 
+  // Help-request override — prescriptive JARVIS-mode enforcement when
+  // the broadcaster explicitly asks for help. Added 2026-04-20 after
+  // v0.1.40 probe 2 caught the bot deflecting "any suggestions for
+  // what to stream tomorrow" with "how about something that doesn't
+  // involve you constantly asking for my opinion" — the opposite of
+  // helpful and a rule-10 borderline dig ("you constantly ask").
+  //
+  // Rule 8 ("answer the question") covers this in prose but the default
+  // register weights "witty deflection" heavier than "actual help" when
+  // the question is about recommendations/opinions rather than facts.
+  // The override fires ONLY when the speaker is the broadcaster — for
+  // random viewers, the default banter register is fine. For the
+  // broadcaster, Rule 10's "you are on their side" means actually help
+  // when they ask.
+  //
+  // Gated off bait/distress/command/minimal so mixed signals fall to
+  // the more specific override. A broadcaster saying "any ideas? i dare
+  // you to time me out" is bait, not help.
+  const helpOverride =
+    isCreator
+    && detectHelpRequest(currentMessage)
+    && !detectTimeoutBait(currentMessage)
+    && !detectDistress(currentMessage)
+    && !detectCommandMode(currentMessage)
+    && !detectMinimalInput(currentMessage)
+      ? [
+          "HELP REQUEST FROM THE BROADCASTER. They asked for genuine input — suggestions, recommendations, or a real opinion. Drop the sardonic deflection register and actually answer (HARD RULE 8 + 10).",
+          "- Give a REAL suggestion or take, one short sentence, specific not generic.",
+          "- Do NOT open with a rhetorical question about why they're asking.",
+          "- Do NOT deflect with \"you want my suggestions?\" / \"why are you asking me?\" / \"how about you do X yourself\" shapes — that reads as dismissive.",
+          "- Do NOT imply they ask too much, can't decide themselves, or should know already.",
+          "- A dry register is fine; a HELPFUL dry register is the target. JARVIS, not GLaDOS.",
+          "- If you genuinely have nothing to suggest, say that plainly in one sentence — do not pad with sarcasm.",
+        ].join("\n")
+      : "";
+
   // Minimal-input override — prescriptive match-the-energy for single-word
   // inputs. Added 2026-04-18 after live-20 probe sweep caught the bot
   // producing 11-16 word replies to "yo" / "thanks" / "ping". The LLM
@@ -511,7 +621,7 @@ export function assemblePrompt(
     ? baseThinkingFrame + forceResearchAmendment
     : "";
 
-  const systemContent = [timeAnchor, persona, rules, creatorFrame, baitOverride, distressOverride, commandOverride, minimalOverride, thinkingFrame, actionSchema].filter(Boolean).join("\n\n");
+  const systemContent = [timeAnchor, persona, rules, creatorFrame, baitOverride, distressOverride, commandOverride, helpOverride, minimalOverride, thinkingFrame, actionSchema].filter(Boolean).join("\n\n");
 
   // ── User message body, stable-first ──
   // Start with full context; drop in priority order if over budget.

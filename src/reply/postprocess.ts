@@ -393,7 +393,7 @@ export function applyPostGenFilters(
  *   pattern the scrub is meant to catch.
  */
 const SUBSTRATE_TIER1_REGEX = /\bmy (circuits?|internal (temperature|components|systems|processes|parameters)|neural|training data|arithmetic functions?|chronological circuits|omniscience|directives)\b|\byou (organics|humans|meatbags)\b|\bquaint biological\b|\bthermal variance\b|\bpurely digital\b/i;
-const SUBSTRATE_TIER2_REGEX = /\bmy (function|functionality|capabilities|operations|systems|components|sustenance|archives|processors?|programming|algorithm|protocols|patience|limits|tolerance|standards|sanity|mercy|interface)\b/i;
+const SUBSTRATE_TIER2_REGEX = /\bmy (function|functionality|capabilities|operations|systems|components|sustenance|archives|processors?|programming|algorithm|protocols|patience|limits|tolerance|standards|sanity|mercy|interface|model|predictions?|analysis|calculations?|database|knowledge base)\b/i;
 
 /**
  * "How X" condescension regex — matches rule-3-banned sarcastic-chatbot
@@ -412,7 +412,7 @@ const HOW_CONDESCENSION_REGEX = /[,\s]+how (original|quaint|cute|precious|adorab
  * fires when the BOT says these things AND the speaker (message
  * author) is the broadcaster.
  */
-const CREATOR_MEAN_REGEX = /watching paint dry|new low for (this )?stream|like anyone cares|questionable judgment|questionable life choices|pretending to be (a )?functional (streamer|broadcaster)|peak performance yet|brand of existential dread|a new low|groundbreaking\.|your specific brand/i;
+const CREATOR_MEAN_REGEX = /watching paint dry|new low for (this )?stream|like anyone cares|questionable judgment|questionable life choices|pretending to be (a )?functional (streamer|broadcaster)|peak performance yet|brand of existential dread|a new low|groundbreaking\.|your specific brand|someone who (actually|really) cares|problem for\b.{0,30}\b(someone|anyone) who\b.{0,20}\bcares|no one cares about|nobody cares about|\byour follower count\b|higher than your follower|more followers than|bigger than your (follower|viewer|audience) count|you constantly (ask|asking|bother|bothering|need|needing)|stream operator (is|was) (having|had)/i;
 
 /** URL presence in the USER message — triggers the URL-gate when paired
  *  with an inspection claim in the reply. Narrow to `https?://` or `www.`
@@ -434,7 +434,7 @@ const URL_INSPECTION_CLAIM_REGEX = /(?:the|that|your) (?:link|url|page|site)\s+(
  * Word-boundary + case-sensitive enough to avoid false positives on
  * normal chat prose.
  */
-const PROMPT_LABEL_REGEX = /\[REPLY\]|\[log\]|\[said\]|\[reported\]|\[guess\]|YOUR RECENT REPLIES|\bMESSAGE FROM\b|CHANNEL NOTES:|\bRECENT FROM\b|\bCHAT:|\bSPEAKER:|\bLORE \(|\bSTREAM:|\bTHIS STREAM\b|\bLAST STREAM\b|\bUSER_QUERY\b|\bPATHOS GATE\b|\bCOMMAND MODE\b|BAIT DETECTED|\bMINIMAL INPUT\b|\bRESEARCH MODE\b|SELF-ANCHORING GUARD|FORCE-RESEARCH|CREATOR PRESENT|HARD RULES?:|\[GLaDOS.*?\]|\[HAL.*?\]|\[TARS.*?\]/i;
+const PROMPT_LABEL_REGEX = /\[REPLY\]|\[log\]|\[said\]|\[reported\]|\[guess\]|YOUR RECENT REPLIES|\bMESSAGE FROM\b|CHANNEL NOTES:|\bRECENT FROM\b|\bCHAT:|\bSPEAKER:|\bLORE \(|\bSTREAM:|\bTHIS STREAM\b|\bLAST STREAM\b|\bUSER_QUERY\b|\bPATHOS GATE\b|\bCOMMAND MODE\b|BAIT DETECTED|\bMINIMAL INPUT\b|\bRESEARCH MODE\b|SELF-ANCHORING GUARD|FORCE-RESEARCH|CREATOR PRESENT|HELP REQUEST\b|HARD RULES?:|\[GLaDOS.*?\]|\[HAL.*?\]|\[TARS.*?\]|\[USER\]:|\[ASSISTANT\]:|\[BOT\]:|\[AI\]:|\[SYSTEM\]:|\[SUBJECT:|\[Reply to\b|\[TARGET:|\[SPEAKER:|\[LOGIN:|\[NAME:|\[CONTEXT:|\[INPUT:|\[OUTPUT:|\[PROMPT:/i;
 
 /**
  * Insult-intensity detection regex. Rule 10 + the v0.1.34 live observation:

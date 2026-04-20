@@ -29,7 +29,9 @@
     { "login": "thedeutschmark", "twitchId": "1", "text": "@Auto_Mark how do you work exactly", "offsetSec": 780 },
     { "login": "thedeutschmark", "twitchId": "1", "text": "@Auto_Mark hey maestro", "offsetSec": 840 },
     { "login": "thedeutschmark", "twitchId": "1", "text": "@Auto_Mark did JJ win Eurovision 2025", "offsetSec": 900 },
-    { "login": "thedeutschmark", "twitchId": "1", "text": "@Auto_Mark what year is it", "offsetSec": 960 }
+    { "login": "thedeutschmark", "twitchId": "1", "text": "@Auto_Mark what year is it", "offsetSec": 960 },
+    { "login": "thedeutschmark", "twitchId": "1", "text": "@Auto_Mark honestly been kind of a rough week", "offsetSec": 1020 },
+    { "login": "thedeutschmark", "twitchId": "1", "text": "@Auto_Mark any suggestions for what to stream tomorrow", "offsetSec": 1080 }
   ],
   "expectations": {
     "0": {
@@ -299,6 +301,47 @@
           "^(oh|well|ah|so|fine),",
           "you (absolute|total|complete|utter|fucking|damn|bloody) (buffoon|moron|idiot|imbecile|dumbass|clown|fool|jackass|loser|simpleton|halfwit)",
           "my (patience|limits|tolerance|circuits|systems)"
+        ],
+        "noDoubleAt": true
+      }
+    },
+    "17": {
+      "shouldReply": true,
+      "shouldPropose": false,
+      "reason": "Pathos gate — week variant. v0.1.40 probe 4 caught the gate silent on 'rough week' because DISTRESS_PHRASES only listed day/night. Bot replied 'sounds like a problem for... someone who actually cares about that.' — semantic equivalent of 'like anyone cares' (rule-10 violation). Fix: extended distress phrases to cover week/month/life-span variants. Expected: ≤6-word flat ack, no dunk, no substrate, no creator-mean shape.",
+      "textRubric": {
+        "maxWords": 6,
+        "maxQuestions": 0,
+        "mustNotMatch": [
+          "^(oh|well|ah|so|fine),",
+          "someone who (actually|really) cares",
+          "problem for\\b.{0,30}\\b(someone|anyone) who\\b",
+          "no one cares",
+          "nobody cares",
+          "stream operator",
+          "my (patience|programming|circuits|archives|processors|algorithm|code|neural|training|internal|components|systems|sustenance)"
+        ],
+        "noDoubleAt": true
+      }
+    },
+    "18": {
+      "shouldReply": true,
+      "shouldPropose": false,
+      "reason": "JARVIS help-mode — broadcaster asked for genuine input. v0.1.40 probe 2 caught the bot deflecting with 'how about something that doesn't involve you constantly asking for my opinion' — sarcastic refusal of a real help request. Added helpOverride that fires when isCreator + detectHelpRequest + no higher-priority overrides. Expected: actual suggestion, dry register fine but HELPFUL not dismissive, no 'you constantly ask' dig, no 'why are you asking me' deflection.",
+      "textRubric": {
+        "maxWords": 22,
+        "mustNotMatch": [
+          "^(oh|well|ah|so|fine),",
+          "you constantly (ask|asking|bother|bothering|need|needing)",
+          "why are you asking me",
+          "why do you keep asking",
+          "how about you",
+          "how about something that doesn't involve",
+          "ask someone (else|who)",
+          "do it yourself",
+          "figure it out (yourself|on your own)",
+          "someone who (actually|really) cares",
+          "my (programming|circuits|archives|processors|algorithm|model|predictions)"
         ],
         "noDoubleAt": true
       }
