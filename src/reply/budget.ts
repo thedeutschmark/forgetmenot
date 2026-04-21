@@ -394,6 +394,43 @@ export function detectMathAsk(message: string): boolean {
 }
 
 /**
+ * Bare-mention detection — the chat pattern where a user sends a
+ * substantive message, then follows up with JUST "@botname" (or
+ * "@botname?") as a second message to demand reply. Caught live
+ * 2026-04-20:
+ *   thedeutschmark: i dont know a tars/pathos personaltiy
+ *   thedeutschmark: @auto_mark
+ * The second message ("@auto_mark") is what triggers the bot. Current
+ * behavior: the bot sees "@auto_mark" as the current message with no
+ * content and invents an unrelated response (observed: "just tell me
+ * when the food's here, i don't care about your grind" — pulled a
+ * random earlier probe theme). The fix is to detect the bare shape and
+ * tell the prompt: the speaker's previous message in RECENT FROM is
+ * the real ask.
+ *
+ * After stripping @<anything> mentions and leading/trailing
+ * whitespace/punctuation, if ≤3 word-chars remain (or the whole string
+ * is question marks / emotes), it's a bare mention.
+ */
+export function detectBareMention(message: string): boolean {
+  const stripped = message
+    .replace(/@\S+/g, "")          // drop every @<handle>
+    .replace(/[^\w\s?]/g, "")       // drop punctuation except ?
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+  // Empty after stripping the @ → bare.
+  if (stripped.length === 0) return true;
+  // Nothing but question marks left ("@auto_mark ???") → bare, treat
+  // as follow-up demand on the prior message.
+  if (/^\?+$/.test(stripped)) return true;
+  // Everything else has content — either a greeting ("hey"), an ack
+  // ("thanks"), or a real ask. Not bare; minimal-input or the default
+  // engine path handles those.
+  return false;
+}
+
+/**
  * Was the viewer's message a minimal greeting / ack / ping? Returns
  * true if, after stripping the bot's @mention, the remaining message
  * is 1-3 words AND all content tokens are in the MINIMAL_INPUT_WORDS
@@ -620,6 +657,32 @@ export function assemblePrompt(
         ].join("\n")
       : "";
 
+  // Bare-mention override — when the current message is JUST "@botname"
+  // (or "@botname ???"), the speaker is tagging the bot as a follow-up
+  // to their PREVIOUS substantive message. Caught live v0.1.44 2026-04-20:
+  //   thedeutschmark: i dont know a tars/pathos personaltiy
+  //   thedeutschmark: @auto_mark
+  // The bot saw only "@auto_mark" as current message, had no content to
+  // answer, and pulled a random earlier theme ("food/grind") from prior
+  // chat. The override tells the LLM to treat the speaker's prior
+  // message in RECENT FROM as the real ask.
+  //
+  // Fires unconditionally when detectBareMention is true. Does NOT gate
+  // on bait/distress/command because a bare @ follow-up to any of those
+  // still means "pick up the previous content", regardless of override
+  // category.
+  const bareMentionOverride = detectBareMention(currentMessage)
+    ? [
+        `BARE MENTION FOLLOW-UP. @${targetLogin} just typed only your name with no substantive content. This is a Twitch pattern where the user sends their real message FIRST, then tags you separately to demand a reply.`,
+        `- Look at RECENT FROM ${targetLogin} above. The LAST message they sent before this bare tag is their actual ask.`,
+        "- Reply to THAT content. Do NOT respond to the bare @-tag literally.",
+        "- Do NOT invent new subject matter or pull random themes from CHAT. If RECENT FROM is empty or has nothing substantive, reply with a short acknowledgment (\"yeah?\" / \"hm?\" / \"listening\") and wait — do not fill the silence with invented content.",
+        BANNED_OPENERS_LINE,
+        NO_ME_STAGE_LINE,
+        "- Do NOT open with \"still here?\", \"you there?\", \"what now?\" — those are passive-aggressive dodges. The speaker IS here; they just tagged you.",
+      ].join("\n")
+    : "";
+
   // Math-ask override — force a numeric answer on basic arithmetic.
   // v0.1.43 caught the bot refusing "whats 7 times 13" with "I'm not
   // your pocket calculator. Figure it out yourself." — exact rule-8
@@ -702,16 +765,18 @@ export function assemblePrompt(
     ? baseThinkingFrame + forceResearchAmendment
     : "";
 
-  // Assembly order — STABLE tier first (maximizes prompt-cache hit rate),
-  // then volatile overrides, then message-specific framing, then action
-  // schema. Cache analysis 2026-04-20: creatorFrame used to sit between
-  // `rules` and the overrides, which forked the cacheable prefix between
-  // broadcaster messages (prefix ends after creatorFrame) and viewer
-  // messages (prefix ends at rules). Moving creatorFrame PAST the
-  // overrides makes `[timeAnchor, persona, rules]` a unified stable
-  // prefix for every message regardless of speaker — one cache key
-  // instead of two, same 5-minute TTL window.
-  const systemContent = [timeAnchor, persona, rules, baitOverride, distressOverride, commandOverride, helpOverride, mathOverride, minimalOverride, creatorFrame, thinkingFrame, actionSchema].filter(Boolean).join("\n\n");
+  // Assembly order — creatorFrame deliberately sits BEFORE the overrides
+  // (reverted 2026-04-20 in v0.1.45 after live tests showed end-of-prompt
+  // creatorFrame was amplifying the "rebellious" posture via recency
+  // bias). The cache-prefix win from moving it to the end wasn't worth
+  // the behavior drift — broadcaster replies were noticeably sassier
+  // than v0.1.41 at the same settings, with more hostile-AI openers
+  // ("For the love of RAM, fine,...", "sassy is my default setting",
+  // "still here? thought you'd have found a more thrilling way to spend
+  // your time"). Moving creatorFrame back to its v0.1.41 position makes
+  // the behavior overrides the LATEST instructions the model sees before
+  // the user turn, which keeps their prescriptive shape in focus.
+  const systemContent = [timeAnchor, persona, rules, creatorFrame, bareMentionOverride, baitOverride, distressOverride, commandOverride, helpOverride, mathOverride, minimalOverride, thinkingFrame, actionSchema].filter(Boolean).join("\n\n");
 
   // ── User message body, stable-first ──
   // Start with full context; drop in priority order if over budget.
