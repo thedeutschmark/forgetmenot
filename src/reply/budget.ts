@@ -393,6 +393,73 @@ export function detectMathAsk(message: string): boolean {
   return MATH_ASK_PATTERNS.some((p) => p.test(message));
 }
 
+// Music-ask patterns. Two flavors:
+//
+//   ABSTRACT — viewer wants the bot to throw something on without naming
+//   a specific song. ("play something chill", "drop a banger", "queue
+//   some lo-fi", "vibe check"). The bot SHOULD respond — pickSongFromVibe
+//   uses recent !sr requests as inspiration and sends `!sr <pick>`.
+//
+//   SPECIFIC — viewer named an actual song + artist. ("play Take On Me
+//   by a-ha", "play 'After Dark'"). The bot should NOT do this — per
+//   2026-04-21 user direction, viewers should run !sr themselves for
+//   specific songs. Bot replies with a brief redirect.
+//
+// Detection order matters: SPECIFIC is checked first; if it matches,
+// detectAbstractMusicAsk returns false even if the abstract patterns
+// would also match. Edge case: "play me something chill by Tycho" —
+// reads as both abstract ("something chill") and specific ("by Tycho")
+// — caller treats as specific (redirect to !sr).
+const SPECIFIC_MUSIC_ASK_PATTERNS: ReadonlyArray<RegExp> = [
+  // "play X by Y" — at least 2 chars on each side, "by" as a word boundary
+  /\b(play|queue|put on|throw on|drop|add)\s+[\w\s'.,!?&-]{2,60}\s+by\s+[\w\s'.,!?&-]{2,60}/i,
+  // "play 'specific title'" or "play "title""
+  /\b(play|queue|put on|throw on|drop|add)\s+["'][^"']{3,80}["']/i,
+];
+
+const ABSTRACT_MUSIC_VIBE_WORDS = "chill|hype|hyped|hard|soft|sad|happy|bop|banger|jam|jams|vibe|vibes|mood|moody|energetic|energy|slow|fast|calm|intense|wild|smooth|funky|spicy|warm|cold|dark|bright|nostalgic|retro|epic|sick|fire|smoke|fresh|gritty|dreamy|moody";
+const ABSTRACT_MUSIC_GENRE_WORDS = "indie|rap|rock|jazz|lo-?fi|lofi|electronic|country|pop|edm|metal|punk|hip[- ]?hop|techno|house|alt|alternative|ambient|trance|dnb|drum[- ]and[- ]bass|emo|r&b|rnb|funk|soul|disco|reggae|ska|blues|folk|classical|orchestral|synthwave|vaporwave|phonk|trap|drill|kpop|jpop";
+
+const ABSTRACT_MUSIC_ASK_PATTERNS: ReadonlyArray<RegExp> = [
+  // "play me a chill song" / "throw on something hype" / "queue some lofi"
+  new RegExp(
+    `\\b(play|queue|put on|throw on|drop|add|throw)\\s+(me\\s+)?(a |an |some |something |me\\s+something\\s+|me\\s+a\\s+|me\\s+an\\s+)?(${ABSTRACT_MUSIC_VIBE_WORDS}|${ABSTRACT_MUSIC_GENRE_WORDS})(\\s+(song|track|tune|jam|jams|banger|bop|vibe|playlist|music))?\\b`,
+    "i",
+  ),
+  // "play something" / "play me a song" with no specifier — generic ask
+  /\b(play|queue|put on|throw on|drop)\s+(me\s+)?(a |an |some |something)\s*(song|track|tune|jam|jams|banger|bop|vibe|playlist|music)?\b/i,
+  // "vibe check"
+  /\bvibe check\b/i,
+  // "what should i play" / "what should we listen to" / "give me a song"
+  /\b(give me|gimme|hit me with) (a |an |some )?(song|track|tune|banger|bop|vibe|jam)/i,
+  /\bwhat should (i|we) (play|listen to|put on|queue)/i,
+  // "drop a banger" / "drop something fire"
+  /\bdrop (a |an |some |something )(track|tune|song|banger|bop|vibe|jam|fire|sick)/i,
+  // "make me dance" / "music for the grind"
+  /\b(music|song|track|playlist) (for|to) (the )?(grind|stream|chat|game|chill|study|work|focus|hype|mood|energy|gaming|cooking|cleaning|coding|driving|workout)/i,
+];
+
+/**
+ * Did the speaker ask the bot to play a SPECIFIC song (named title and/or
+ * artist)? When true, the bot redirects with a short "use !sr yourself"
+ * reply — per 2026-04-21 user direction, the bot does NOT autonomously
+ * queue specific named songs that a user could just type !sr for.
+ */
+export function detectSpecificMusicAsk(message: string): boolean {
+  return SPECIFIC_MUSIC_ASK_PATTERNS.some((p) => p.test(message));
+}
+
+/**
+ * Did the speaker make an ABSTRACT music ask ("play something chill",
+ * "drop a banger", "vibe check") that the bot should answer by picking
+ * a song from the recent !sr vibe? Returns false if the message is
+ * ALSO a specific ask (specific wins, redirect to user).
+ */
+export function detectAbstractMusicAsk(message: string): boolean {
+  if (detectSpecificMusicAsk(message)) return false;
+  return ABSTRACT_MUSIC_ASK_PATTERNS.some((p) => p.test(message));
+}
+
 /**
  * Bare-mention detection — the chat pattern where a user sends a
  * substantive message, then follows up with JUST "@botname" (or

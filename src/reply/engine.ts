@@ -14,7 +14,14 @@ import { getDb } from "../db/index.js";
 import { buildReplyContext, type ReplyContext } from "../memory/context.js";
 import { chatCompletion, type LlmMessage } from "../llm/adapter.js";
 import { checkReplyPolicy, isMentionOfBot, recordReply, validateReplyText } from "./policy.js";
-import { assemblePrompt, detectTimeoutBait, detectDistress, type PromptMetrics } from "./budget.js";
+import { assemblePrompt, detectTimeoutBait, detectDistress, detectAbstractMusicAsk, detectSpecificMusicAsk, type PromptMetrics } from "./budget.js";
+import { trackChatMessage as trackSrChatMessage } from "../music/sr-tracker.js";
+import { pickSongFromVibe } from "../music/picker.js";
+import {
+  shouldAutonomousChime, recordAutonomousChime,
+  shouldAskedChime, recordAskedChime,
+} from "../music/chime.js";
+import { getRecentSrRequests } from "../music/sr-tracker.js";
 import { applyPostGenFilters } from "./postprocess.js";
 import { sendMessage, isConnected } from "../gateway/twitch.js";
 import { parseReplyWithAction } from "../actions/proposals.js";
@@ -147,6 +154,14 @@ export async function onChatMessage(
   if (!config || !currentBundle) return;
   const { settings, policy } = currentBundle;
 
+  // Music: every chat message — including the bot's own !sr echo —
+  // gets passed through the !sr tracker so the picker has a vibe
+  // signal to read. Cheap, returns immediately when the message
+  // doesn't start with !sr. Done before any policy/mention gating
+  // so even messages from known-chat-bots' !sr broadcasts (rare)
+  // can contribute, and so the bot's own emissions are recorded.
+  trackSrChatMessage(login, message, currentBundle.botAccount?.login || settings.botName);
+
   // Determine if this is a mention — checks botName plus any configured aliases
   const isMention = isMentionOfBot(message, settings);
 
@@ -171,6 +186,24 @@ export async function onChatMessage(
   if (config.mode !== "shadow" && !isConnected()) {
     logBlockedAttempt(login, twitchId, "runtime", "twitch_disconnected", isMention);
     return;
+  }
+
+  // Music ask intercept — only on direct @-mention. Specific named-song
+  // asks ("play X by Y") get a short redirect to !sr; abstract vibe asks
+  // ("play something chill") get answered by the picker. Skipped for
+  // non-mention chat so the bot doesn't step on viewer-to-viewer talk
+  // where someone happens to say "play something chill" to a friend.
+  if (isMention && config.mode === "live") {
+    const musicHandled = await handleMusicAsk(login, message, settings.botName);
+    if (musicHandled) {
+      // Music ask consumed the turn — record it as a reply for cooldown
+      // and rate-limit purposes, then fire the post-message autonomous
+      // chime tick (it'll be cooldown-blocked because we just chimed,
+      // but the tick is cheap and gating is centralized in chime.ts).
+      recordReply(login);
+      void maybeFireAutonomousChime();
+      return;
+    }
   }
 
   // Build context — stale filter uses memoryRetentionDays from settings so
@@ -396,6 +429,111 @@ export async function onChatMessage(
     console.error("[reply] LLM call failed:", errMsg);
     logBlockedAttempt(login, twitchId, "llm_error", errMsg.slice(0, 200), isMention);
   }
+
+  // Autonomous music chime tick — fired AFTER the normal reply flow so
+  // the bot's chime can occasionally land in addition to whatever it
+  // was already doing. Internally cooldown / probability / cap gated;
+  // this call is cheap and almost always returns without firing.
+  void maybeFireAutonomousChime();
+}
+
+/**
+ * Music-ask handler. Called from onChatMessage when a direct @-mention
+ * is detected and engineMode is live. Returns true if it consumed the
+ * turn (sent a reply or redirect) so the caller can short-circuit the
+ * normal LLM reply path.
+ *
+ *   SPECIFIC ask ("play X by Y"): bot redirects with a short canned
+ *     "use !sr <song> <artist> yourself" line. Per 2026-04-21 user
+ *     direction — bot doesn't queue specific named songs for users.
+ *
+ *   ABSTRACT ask ("play something chill"): bot calls pickSongFromVibe
+ *     with the recent chat !sr buffer + the viewer's own message as
+ *     hint. Sends `!sr <pick>` if the picker returned something. May
+ *     also send a brief "got you" line so chat sees the bot acted.
+ */
+async function handleMusicAsk(
+  login: string,
+  message: string,
+  botName: string,
+): Promise<boolean> {
+  if (!config) return false;
+
+  // Specific ask → redirect (always; no cooldown)
+  if (detectSpecificMusicAsk(message)) {
+    const m = message.match(/\b(?:play|queue|put on|throw on|drop|add)\s+([\w\s'.,!?&-]{2,80})/i);
+    const songHint = m ? m[1].trim().slice(0, 80) : "your song";
+    const reply = `@${login} type \`!sr ${songHint}\` yourself — i don't queue specific named tracks for people.`;
+    sendMessage(reply);
+    console.log(`[music:redirect] ${login} asked for specific song; redirected to !sr`);
+    return true;
+  }
+
+  // Abstract ask → pick from vibe
+  if (detectAbstractMusicAsk(message)) {
+    if (!shouldAskedChime()) {
+      // Cooldown — bot recently chimed. Acknowledge briefly without queueing
+      // so the user knows it heard them.
+      sendMessage(`@${login} just queued one a sec ago — let it cook.`);
+      console.log(`[music:asked-cooldown] ${login} asked but cooldown active`);
+      return true;
+    }
+    const apiKey = config.apiKey;
+    if (!apiKey) {
+      console.warn("[music] No LLM API key — can't pick a song");
+      return false; // fall through to normal reply path
+    }
+    recordAskedChime(); // record BEFORE the LLM call so concurrent asks don't double-fire
+    const result = await pickSongFromVibe({
+      recentRequests: getRecentSrRequests(60 * 60 * 1000, /*excludeBotEmissions*/ false),
+      abstractAskHint: message,
+      apiKey,
+    });
+    if (!result.query) {
+      console.log(`[music:asked-pick-empty] picker returned no song (raw: "${result.raw.slice(0, 80)}")`);
+      sendMessage(`@${login} blanking on a pick — try again in a bit.`);
+      return true;
+    }
+    // Send the !sr line. Don't @-tag — !sr is a command, not a reply.
+    sendMessage(`!sr ${result.query}`);
+    console.log(`[music:asked-fire] picked "${result.query}" for ${login}`);
+    return true;
+  }
+
+  // Not a music ask — let normal reply path handle it
+  void botName; // botName is reserved for future use (e.g. "play yourself")
+  return false;
+}
+
+/**
+ * Autonomous chime — runs after every chat message. The shouldAutonomousChime
+ * gate handles cooldown / probability / cap / vibe-signal gating, so this
+ * call is cheap when it isn't going to fire (returns synchronously after
+ * a few cheap checks). When it DOES fire, the LLM picker runs and the
+ * !sr is sent without any addressed-to-viewer text.
+ */
+async function maybeFireAutonomousChime(): Promise<void> {
+  if (!config || !currentBundle) return;
+  if (config.mode !== "live") return; // never autonomously chime in shadow / mentions_only modes
+  if (!shouldAutonomousChime()) return;
+
+  const apiKey = config.apiKey;
+  if (!apiKey) {
+    console.warn("[music:auto] No LLM API key — skipping autonomous chime");
+    return;
+  }
+
+  recordAutonomousChime(); // record before the call so a concurrent message can't double-fire
+  const result = await pickSongFromVibe({
+    recentRequests: getRecentSrRequests(60 * 60 * 1000, /*excludeBotEmissions*/ true),
+    apiKey,
+  });
+  if (!result.query) {
+    console.log(`[music:auto-pick-empty] autonomous chime picked nothing (raw: "${result.raw.slice(0, 80)}")`);
+    return;
+  }
+  sendMessage(`!sr ${result.query}`);
+  console.log(`[music:auto-fire] autonomous chime picked "${result.query}"`);
 }
 
 function shouldAttemptReply(
