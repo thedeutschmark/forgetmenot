@@ -437,6 +437,16 @@ const ABSTRACT_MUSIC_ASK_PATTERNS: ReadonlyArray<RegExp> = [
   /\bdrop (a |an |some |something )(track|tune|song|banger|bop|vibe|jam|fire|sick)/i,
   // "make me dance" / "music for the grind"
   /\b(music|song|track|playlist) (for|to) (the )?(grind|stream|chat|game|chill|study|work|focus|hype|mood|energy|gaming|cooking|cleaning|coding|driving|workout)/i,
+  // "play more songs like X" / "more music like X" / "songs like this" /
+  // "stuff like X" / "something like X" — the "play something similar"
+  // family. Live failure 2026-04-21: "play more songs like mine" fell
+  // through to the regular reply LLM which invented `➕ Crust - Blue
+  // World` as a fake !sr. Catching the "like" anchor routes these to
+  // the picker where the output format is controlled.
+  /\bplay (more|another|similar|different|other) (songs?|tracks?|tunes?|music|jams?|bangers?|bops?|vibes?|stuff|things?)/i,
+  /\b(play|throw on|put on|queue|drop|add) (more |some |something |a )(song|track|tune|music|jam|banger|bop|vibe|stuff|thing)s? (like|similar to|matching|in the style of)/i,
+  /\b(songs?|tracks?|tunes?|music|jams?|bangers?|bops?|vibes?|stuff) like (mine|this|that|yours|the (last|current|one) one|what(?:'s|s| is) (playing|on))/i,
+  /\bplay (something|anything|stuff) (like|similar)/i,
 ];
 
 /**

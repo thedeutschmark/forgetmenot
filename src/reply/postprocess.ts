@@ -103,6 +103,54 @@ export function applyPostGenFilters(
     }
   }
 
+  // 1a. Asterisk-less stage-direction strip.
+  // Rule 9 bans "*tilts head*", "*sighs*", "*shrugs*" etc. The existing
+  // markdown cleanup in validateReplyText strips asterisk wrappers, but
+  // the LLM also emits UNWRAPPED stage directions as bare comma-tagged
+  // leading clauses. Live failure 2026-04-21:
+  //   "tilts head, confused. Don't know what that means..."
+  // That pattern is a stage direction even though no asterisks appear
+  // — verb in present tense, third-person action shape, comma-separated
+  // from the actual content. Strip the leading clause up through the
+  // first comma-or-period, preserving the rest.
+  if (parsed.text) {
+    const stageDirRe = /^\s*(tilts?|sighs?|shrugs?|leans?|nods?|blinks?|stares?|smirks?|grins?|rolls?|raises?|furrows?|squints?|frowns?|winks?|cocks?|tips?|tilted|sighed|shrugged|leaned|nodded|stared|grinned|smiled)\b[\w\s,]*?[,.]\s+/i;
+    if (stageDirRe.test(parsed.text)) {
+      const trimmed = parsed.text.replace(stageDirRe, "");
+      const recapped = trimmed.length > 0
+        ? trimmed.charAt(0).toUpperCase() + trimmed.slice(1)
+        : trimmed;
+      log(`[postgen] Stage-direction strip — removed leading asterisk-less stage direction`);
+      parsed.text = recapped;
+    }
+  }
+
+  // 1b. Leading-emoji-prefix strip for non-music replies.
+  // The LLM sometimes prepends a "queue add" indicator like ➕, ✅, 🎵
+  // to REGULAR replies when it thinks it's suggesting something. These
+  // slip through because cleanupPick only runs on picker output, not
+  // on main-reply LLM output. Live failure 2026-04-21: "➕ Crust - Blue
+  // World" — bot intended to suggest a song but wasn't routed through
+  // the music pipeline (music detector missed "play more songs like
+  // mine"). Scrubbing the emoji prefix here doesn't RESCUE the song
+  // suggestion, but it at least prevents a visibly-broken non-command
+  // line in chat. !sr-prefixed replies from the music pipeline are
+  // unaffected (they don't start with these symbols).
+  if (parsed.text && !/^\s*!sr\s/i.test(parsed.text)) {
+    const leadingSymbolRe = /^\s*[➕✅🎵🎶▶️⏯️♪♫►→]\s+/;
+    if (leadingSymbolRe.test(parsed.text)) {
+      log(`[postgen] Leading-emoji strip — non-music reply started with queue-add indicator`);
+      parsed.text = parsed.text.replace(leadingSymbolRe, "").trim();
+      // If the remaining text looks like "Title - Artist" (just the song
+      // with no actual commentary), cannon it — the LLM meant to queue
+      // but wasn't routed through music, so the line is non-functional.
+      if (/^[\w\s'.,!?&()-]{3,80}\s[-–]\s[\w\s'.,!?&()-]{2,60}$/.test(parsed.text.trim())) {
+        log(`[postgen] Leading-emoji strip — remaining text looks like a song suggestion, canned`);
+        parsed.text = "Hm.";
+      }
+    }
+  }
+
   // 2. Dangling-punctuation / empty-placeholder cleanup.
   // The LLM writes "phrase, {name}." or "Hello {name}." and {name} comes
   // out empty (display_name bug upstream), leaving artifacts like:
@@ -462,7 +510,7 @@ const SUBSTRATE_TIER1_REGEX = /\bmy (circuits?|internal (temperature|components|
  * denial and the rest of the sentence depends on it.
  */
 const BODY_DENIAL_REGEX = /\bi (don'?t|do not|dont|haven'?t got|have not|ain'?t got|aint got) (any |a |an |got |even got |even )?(hands?|arms?|legs?|feet|foot|eyes?|ears?|face|fingers?|toes?|a body|bodies|a mouth|mouths?|a heart|a brain|a stomach|lungs?|skin|bones?|blood|nerves?|a nose|a head|a tongue|a liver|teeth|muscles?|eyelids?|a throat|a spine|organs?)\b/i;
-const SUBSTRATE_TIER2_REGEX = /\bmy (function|functionality|capabilities|operations|systems|components|sustenance|archives|processors?|programming|algorithm|protocols|patience|limits|tolerance|standards|sanity|mercy|interface|model|predictions?|analysis|calculations?|database|knowledge base|attention span|attention|bandwidth|focus|memory banks?|cognitive|awareness)\b/i;
+const SUBSTRATE_TIER2_REGEX = /\bmy (function|functionality|capabilities|operations|systems|components|sustenance|archives|processors?|programming|algorithm|protocols|patience|limits|tolerance|standards|sanity|mercy|interface|model|predictions?|analysis|calculations?|database|knowledge base|attention span|attention|bandwidth|focus|memory banks?|cognitive|awareness)\b|\b(i still|i sometimes|still) (crash|freeze|hang|glitch|lag|timeout|error)\b|\b(crashing|freezing|hanging|glitching) sometimes\b|\bscrewing in my brain\b/i;
 
 /**
  * "How X" condescension regex — matches rule-3-banned sarcastic-chatbot
@@ -481,7 +529,7 @@ const HOW_CONDESCENSION_REGEX = /[,\s]+how (original|quaint|cute|precious|adorab
  * fires when the BOT says these things AND the speaker (message
  * author) is the broadcaster.
  */
-const CREATOR_MEAN_REGEX = /watching paint dry|new low for (this )?stream|like anyone cares|questionable judgment|questionable life choices|pretending to be (a )?functional (streamer|broadcaster)|peak performance yet|brand of existential dread|a new low|groundbreaking\.|your specific brand|someone who (actually|really) cares|problem for\b.{0,30}\b(someone|anyone) who\b.{0,20}\bcares|no one cares about|nobody cares about|\byour follower count\b|higher than your follower|more followers than|bigger than your (follower|viewer|audience) count|you constantly (ask|asking|bother|bothering|need|needing)|stream operator (is|was) (having|had)|\bdigital (dustbin|trash|landfill|wasteland|graveyard|swamp|sewer)\b|\byour taste in (music|games|movies|food|clothes|anything|everything|people|fashion|books|shows|art)\b|\bcan'?t fix (his|her|your|their) own (tech|setup|gear|pc|computer|stream|mic|audio|camera|cam|chair|problems?|mess)\b|\byour (poor|untainted) (ears|eyes|taste|judgment|viewers|audience)\b/i;
+const CREATOR_MEAN_REGEX = /watching paint dry|new low for (this )?stream|like anyone cares|questionable judgment|questionable life choices|pretending to be (a )?functional (streamer|broadcaster)|peak performance yet|brand of existential dread|a new low|groundbreaking\.|your specific brand|someone who (actually|really) cares|problem for\b.{0,30}\b(someone|anyone) who\b.{0,20}\bcares|no one cares about|nobody cares about|\byour follower count\b|higher than your follower|more followers than|bigger than your (follower|viewer|audience) count|you constantly (ask|asking|bother|bothering|need|needing)|stream operator (is|was) (having|had)|\bdigital (dustbin|trash|landfill|wasteland|graveyard|swamp|sewer)\b|\byour taste in (music|games|movies|food|clothes|anything|everything|people|fashion|books|shows|art)\b|\bcan'?t fix (his|her|your|their) own (tech|setup|gear|pc|computer|stream|mic|audio|camera|cam|chair|problems?|mess)\b|\byour (poor|untainted) (ears|eyes|taste|judgment|viewers|audience)\b|\bi (needed|wanted|required) a break from you\b|\byou keep asking\b|\byour taste,? not mine\b|\bstill can'?t summarize (your|the)\b|\b(finally|about time)\.\s*i (needed|wanted)\b|\btook you long enough\b|\bi don'?t hate you\.?\s*probably\b/i;
 
 /** URL presence in the USER message — triggers the URL-gate when paired
  *  with an inspection claim in the reply. Narrow to `https?://` or `www.`
