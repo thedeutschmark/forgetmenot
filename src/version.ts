@@ -6,4 +6,4 @@
  * next build will regenerate. The committed value exists so `tsx watch`
  * dev mode has something to read without running a build first.
  */
-export const VERSION = "0.1.45";
+export const VERSION = "0.1.46";

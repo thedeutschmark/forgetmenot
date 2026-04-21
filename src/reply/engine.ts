@@ -45,6 +45,49 @@ const BASE_REPLY_CHANCE: Record<string, number> = {
   high: 0.35,
 };
 
+/**
+ * Mentions get a fuller model than autonomous probabilistic replies.
+ *
+ * Reasoning (2026-04-20 user direction): direct @-mentions are user-
+ * initiated asks where quality matters most and volume is bounded by
+ * actual viewer demand. Probabilistic chime-ins fire on every Nth chat
+ * line and need to stay cheap. Routing the two paths to different
+ * models lets us spend tokens where the experience benefit is highest
+ * without inflating cost on the high-volume path.
+ *
+ * Model choice:
+ *   - mention   → gemini-2.5-flash (full, NOT -lite). More headroom
+ *                 for instruction following, cleaner register, fewer
+ *                 substrate / honorific / refusal leaks observed in
+ *                 the user's own A/B testing.
+ *   - non-mention (probabilistic) → settings.aiModel (the configured
+ *                 default, normally gemini-2.5-flash-lite). Cheap
+ *                 enough for autonomous chatter.
+ *
+ * Token budget:
+ *   The default settings.maxReplyLength=250 is tuned for flash-lite's
+ *   typically short outputs. Flash-full can produce slightly longer
+ *   replies; we bump to max(600, settings.maxReplyLength * 2) on
+ *   mentions to prevent finish_reason="length" truncation. The
+ *   downstream validateReplyText still hard-caps the visible character
+ *   count at min(500, maxReplyLength * 4) so chat never sees a wall of
+ *   text — the bump is purely the model's generation budget, not the
+ *   send-to-chat cap.
+ */
+const MENTION_MODEL = "gemini-2.5-flash";
+function pickReplyModel(
+  settings: { aiModel: string; maxReplyLength: number },
+  isMention: boolean,
+): { model: string; maxTokens: number } {
+  if (isMention) {
+    return {
+      model: MENTION_MODEL,
+      maxTokens: Math.max(600, settings.maxReplyLength * 2),
+    };
+  }
+  return { model: settings.aiModel, maxTokens: settings.maxReplyLength };
+}
+
 export function initEngine(engineConfig: EngineConfig, bundle: RuntimeBundle): void {
   config = engineConfig;
   currentBundle = bundle;
@@ -157,9 +200,15 @@ export async function onChatMessage(
     .slice(0, 12);
 
   try {
+    // Route mentions to a fuller model (gemini-2.5-flash) with a bumped
+    // maxTokens budget so we don't truncate. Probabilistic non-mention
+    // replies stay on whatever's configured (typically flash-lite) for
+    // cost. See pickReplyModel comment block for full reasoning.
+    const reply = pickReplyModel(settings, isMention);
+    console.log(`[reply] model=${reply.model} maxTokens=${reply.maxTokens} isMention=${isMention}`);
     let response = await chatCompletion(
-      { provider: settings.aiProvider, model: settings.aiModel, apiKey: config.apiKey },
-      { messages, maxTokens: settings.maxReplyLength, temperature: 0.9 },
+      { provider: settings.aiProvider, model: reply.model, apiKey: config.apiKey },
+      { messages, maxTokens: reply.maxTokens, temperature: 0.9 },
     );
 
     // TARS-mode research gate. Fires only when the operator enabled
