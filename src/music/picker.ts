@@ -73,10 +73,11 @@ export async function pickSongFromVibe(input: PickerInput): Promise<PickerResult
     : "";
 
   const systemContent = [
-    "You suggest ONE song that fits the vibe of recent chat song requests. Output format: just the song title and artist on ONE LINE, nothing else.",
-    "GOOD output: 'After Dark - Mr.Kitty' / 'Take On Me a-ha' / 'Sunset Lover Petit Biscuit'",
-    "BAD output: 'I would suggest...', 'Try this:', adding commentary, multiple suggestions, quotes, markdown, emojis.",
-    "The chat queue uses `!sr <query>` so your output goes through Spotify search exactly as written. Keep it clean and search-friendly.",
+    "You suggest ONE song that fits the vibe of recent chat song requests.",
+    "REQUIRED OUTPUT FORMAT: `<Title> - <Artist>` on ONE LINE. The dash with spaces is required — Spotify's search treats it as the separator and dropping it produces zero matches.",
+    "GOOD output: `After Dark - Mr.Kitty` / `Take On Me - a-ha` / `Midnight City - M83` / `Sunset Lover - Petit Biscuit`",
+    "BAD output: `Midnight City M83` (no dash — search will fail), `I would suggest: ...`, `Try this:`, multiple suggestions, quotes, markdown, emojis (no ➕, ✅, 🎵), bullet points, justification text after the song.",
+    "The chat will queue your output via `!sr <your output>` going through Spotify search exactly as written. The separator MATTERS.",
     "If you genuinely can't pick something matching the vibe, output exactly: SKIP",
     "Do not pick a song that already appears in the recent requests list — pick something complementary, not duplicate.",
   ].join(" ");
@@ -137,10 +138,23 @@ function cleanupPick(raw: string): string | null {
   s = s.replace(/^(song|track|pick|suggestion|answer|reply)\s*[:\-—]\s*/i, "");
   // Strip surrounding quotes / markdown.
   s = s.replace(/^["'`*_]+|["'`*_]+$/g, "");
-  // Strip leading bullet / dash.
-  s = s.replace(/^[\-•*]\s*/, "");
+  // Strip leading bullet / dash / decorative emoji prefix. The model
+  // sometimes prepends a "queue add" indicator like ➕ or ✅ even when
+  // told not to. Live failure 2026-04-21: bot sent "➕ MGMT - Electric
+  // Feel" to chat instead of "!sr MGMT - Electric Feel", didn't queue.
+  s = s.replace(/^[\-•*➕✅🎵🎶▶️⏯️▶️♪♫►→]\s*/, "");
   // Collapse internal whitespace.
   s = s.replace(/\s+/g, " ").trim();
+
+  // Enforce the "Title - Artist" dash format. If the model dropped the
+  // dash separator, Spotify search returns zero matches and the !sr
+  // silently fails. We can't reliably reconstruct the title/artist
+  // boundary from a flat string ("Midnight City M83"), so when the
+  // dash is missing we reject the pick and let the caller skip this
+  // chime cycle. Better to skip than to ship a !sr that won't queue.
+  if (!s.includes(" - ") && !s.includes(" – ") && !/\sby\s/i.test(s)) {
+    return null;
+  }
 
   // Length sanity. A song title + artist over 100 chars is almost
   // certainly broken (e.g. an LLM apology in disguise).
