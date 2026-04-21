@@ -103,53 +103,12 @@ export function applyPostGenFilters(
     }
   }
 
-  // 1a. Asterisk-less stage-direction strip.
-  // Rule 9 bans "*tilts head*", "*sighs*", "*shrugs*" etc. The existing
-  // markdown cleanup in validateReplyText strips asterisk wrappers, but
-  // the LLM also emits UNWRAPPED stage directions as bare comma-tagged
-  // leading clauses. Live failure 2026-04-21:
-  //   "tilts head, confused. Don't know what that means..."
-  // That pattern is a stage direction even though no asterisks appear
-  // — verb in present tense, third-person action shape, comma-separated
-  // from the actual content. Strip the leading clause up through the
-  // first comma-or-period, preserving the rest.
-  if (parsed.text) {
-    const stageDirRe = /^\s*(tilts?|sighs?|shrugs?|leans?|nods?|blinks?|stares?|smirks?|grins?|rolls?|raises?|furrows?|squints?|frowns?|winks?|cocks?|tips?|tilted|sighed|shrugged|leaned|nodded|stared|grinned|smiled)\b[\w\s,]*?[,.]\s+/i;
-    if (stageDirRe.test(parsed.text)) {
-      const trimmed = parsed.text.replace(stageDirRe, "");
-      const recapped = trimmed.length > 0
-        ? trimmed.charAt(0).toUpperCase() + trimmed.slice(1)
-        : trimmed;
-      log(`[postgen] Stage-direction strip — removed leading asterisk-less stage direction`);
-      parsed.text = recapped;
-    }
-  }
-
-  // 1b. Leading-emoji-prefix strip for non-music replies.
-  // The LLM sometimes prepends a "queue add" indicator like ➕, ✅, 🎵
-  // to REGULAR replies when it thinks it's suggesting something. These
-  // slip through because cleanupPick only runs on picker output, not
-  // on main-reply LLM output. Live failure 2026-04-21: "➕ Crust - Blue
-  // World" — bot intended to suggest a song but wasn't routed through
-  // the music pipeline (music detector missed "play more songs like
-  // mine"). Scrubbing the emoji prefix here doesn't RESCUE the song
-  // suggestion, but it at least prevents a visibly-broken non-command
-  // line in chat. !sr-prefixed replies from the music pipeline are
-  // unaffected (they don't start with these symbols).
-  if (parsed.text && !/^\s*!sr\s/i.test(parsed.text)) {
-    const leadingSymbolRe = /^\s*[➕✅🎵🎶▶️⏯️♪♫►→]\s+/;
-    if (leadingSymbolRe.test(parsed.text)) {
-      log(`[postgen] Leading-emoji strip — non-music reply started with queue-add indicator`);
-      parsed.text = parsed.text.replace(leadingSymbolRe, "").trim();
-      // If the remaining text looks like "Title - Artist" (just the song
-      // with no actual commentary), cannon it — the LLM meant to queue
-      // but wasn't routed through music, so the line is non-functional.
-      if (/^[\w\s'.,!?&()-]{3,80}\s[-–]\s[\w\s'.,!?&()-]{2,60}$/.test(parsed.text.trim())) {
-        log(`[postgen] Leading-emoji strip — remaining text looks like a song suggestion, canned`);
-        parsed.text = "Hm.";
-      }
-    }
-  }
+  // (v0.1.51 asterisk-less stage-direction strip and leading-emoji
+  //  prefix strip removed in v0.1.54 consolidation — both originated
+  //  from single observed failures ("tilts head, confused" and "➕
+  //  Crust - Blue World") that are no longer reproducible post
+  //  v0.1.47 prompt rewrite + v0.1.51 music-detector widening. If they
+  //  recur, re-add with a test probe first.)
 
   // 2. Dangling-punctuation / empty-placeholder cleanup.
   // The LLM writes "phrase, {name}." or "Hello {name}." and {name} comes

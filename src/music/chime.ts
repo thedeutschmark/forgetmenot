@@ -100,22 +100,6 @@ export function recordAskedChime(): void {
   lastAskedChimeAt = Date.now();
 }
 
-/** Telemetry shape for /health surface or eval inspection. */
-export function getChimeState(): {
-  autonomousLastAt: number;
-  autonomousChimesToday: number;
-  autonomousDayKey: string;
-  askedLastAt: number;
-} {
-  rollDailyCounterIfNeeded();
-  return {
-    autonomousLastAt: lastAutonomousChimeAt,
-    autonomousChimesToday,
-    autonomousDayKey,
-    askedLastAt: lastAskedChimeAt,
-  };
-}
-
 // ── Helpers ──
 
 function rollDailyCounterIfNeeded(): void {
@@ -124,12 +108,4 @@ function rollDailyCounterIfNeeded(): void {
     autonomousDayKey = today;
     autonomousChimesToday = 0;
   }
-}
-
-/** Test/debug. */
-export function _resetForTests(): void {
-  lastAutonomousChimeAt = 0;
-  autonomousChimesToday = 0;
-  autonomousDayKey = "";
-  lastAskedChimeAt = 0;
 }

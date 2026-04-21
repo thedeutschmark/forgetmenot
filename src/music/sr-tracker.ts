@@ -73,8 +73,3 @@ export function getRecentSrCount(maxAgeMs = 60 * 60 * 1000): number {
   const cutoff = Date.now() - maxAgeMs;
   return recentRequests.filter((r) => r.ts >= cutoff).length;
 }
-
-/** Test/debug helper. Not used in production paths. */
-export function _resetForTests(): void {
-  recentRequests.length = 0;
-}

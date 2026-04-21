@@ -366,32 +366,11 @@ export function detectHelpRequest(message: string): boolean {
   return HELP_REQUEST_PATTERNS.some((p) => p.test(message));
 }
 
-// Math-ask patterns — basic arithmetic / numeric questions where the
-// expected answer is a specific number. Caught live v0.1.43 2026-04-20:
-// "whats 7 times 13" got "I'm not your pocket calculator. Figure it out
-// yourself." — a hostile rule-8 refusal of a trivially answerable ask.
-// Rule 8 says "answer the question, jab is optional, never required".
-//
-// Narrow on purpose: we only want to fire on questions where the answer
-// is unambiguously a number. Conversational uses ("times have changed")
-// or word-problems are out of scope.
-const MATH_ASK_PATTERNS: ReadonlyArray<RegExp> = [
-  /\bwhat'?s? \d+\s*(?:[+\-*x×÷/]|times|plus|minus|divided by|over)\s*\d+/i,
-  /\bwhat is \d+\s*(?:[+\-*x×÷/]|times|plus|minus|divided by|over)\s*\d+/i,
-  /\bcalculate \d+/i,
-  /\b(\d+)\s*(?:times|x|×|\*|plus|\+|minus|-|divided by|over|\/)\s*(\d+)\??\s*$/i,
-  /\bhow much is \d+\s*(?:[+\-*x×÷/]|times|plus|minus|divided by|over)\s*\d+/i,
-];
-
-/**
- * Did the speaker ask a basic arithmetic question? Used to fire
- * mathOverride which forces the bot to compute an answer (or admit
- * "I don't know") rather than refusing with "pocket calculator" /
- * "figure it out yourself" deflections.
- */
-export function detectMathAsk(message: string): boolean {
-  return MATH_ASK_PATTERNS.some((p) => p.test(message));
-}
+// (v0.1.43 detectMathAsk / MATH_ASK_PATTERNS / mathOverride removed in
+// v0.1.54 consolidation — the "89×11 → 979." few-shot in the bank
+// teaches the same behavior more cheaply. If math-refusal regresses
+// the first move is to add a probe to the eval fixtures, not to
+// resurrect the override.)
 
 // Music-ask patterns. Two flavors:
 //
@@ -798,22 +777,8 @@ export function assemblePrompt(
       ].join("\n")
     : "";
 
-  // Math-ask override — force a numeric answer on basic arithmetic.
-  // v0.1.43 caught the bot refusing "whats 7 times 13" with "I'm not
-  // your pocket calculator. Figure it out yourself." — exact rule-8
-  // refusal + canned-AI-chatbot deflection shape.
-  //
-  // Fires on any speaker (mentions of math aren't a broadcaster-only
-  // pattern). Bait / distress / command / minimal still win on mixed
-  // signals.
-  const mathOverride =
-    detectMathAsk(currentMessage)
-    && !detectTimeoutBait(currentMessage)
-    && !detectDistress(currentMessage)
-    && !detectCommandMode(currentMessage)
-    && !detectMinimalInput(currentMessage)
-      ? "MATH ASK. The speaker asked basic arithmetic. Use the SHAPE from the math examples above (\"979.\"): the numeric answer, optional dry tag. Refusing is forbidden — \"I'm not your pocket calculator\" / \"figure it out yourself\" do not ship. If you genuinely can't compute, say \"I don't know\" plainly."
-      : "";
+  // (v0.1.43 mathOverride removed in v0.1.54 consolidation — the
+  //  "89×11 → 979." few-shot carries the behavior.)
 
   // Minimal-input override — prescriptive match-the-energy for single-word
   // inputs. Added 2026-04-18 after live-20 probe sweep caught the bot
@@ -872,17 +837,16 @@ export function assemblePrompt(
   //
   //   VOLATILE (conditional on speaker / message shape):
   //     creatorFrame (when isCreator)
-  //     bareMentionOverride / bait / distress / command / help / math / minimal
+  //     bareMentionOverride / bait / distress / command / help / minimal
   //     thinkingFrame (when thinkingAllowed)
   //
   //   END:
   //     actionSchema (stable but small)
   //
-  // creatorFrame deliberately sits BEFORE the behavior overrides — the
-  // v0.1.42 attempt to move it to the end amplified the "rebellious"
-  // posture via recency bias (reverted in v0.1.45). Behavior overrides
-  // remain the last prescriptive content before the user turn so their
-  // SHAPE prescriptions stay in focus.
+  // creatorFrame sits BEFORE the behavior overrides — moving it to the
+  // end amplified "rebellious" posture via recency bias. Behavior
+  // overrides remain the last prescriptive content before the user
+  // turn so their SHAPE prescriptions stay in focus.
   const systemContent = [
     timeAnchor,
     persona,
@@ -895,7 +859,6 @@ export function assemblePrompt(
     distressOverride,
     commandOverride,
     helpOverride,
-    mathOverride,
     minimalOverride,
     thinkingFrame,
     actionSchema,
