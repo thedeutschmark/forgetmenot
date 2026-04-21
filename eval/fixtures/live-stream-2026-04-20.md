@@ -52,21 +52,27 @@ Calling CronDelete now to stop further fires. Cron ID c2997889.
 
 ## Live failure cases (post-observer)
 
-### Probabilistic-chime sarcasm to non-baiting viewer (2026-04-21, post v0.1.48)
-Context: viewer-to-viewer chat about dating. squidstre comments to juuuben ("nah its juuuben cause hes getting play"). Not a bait. Not directed at the bot.
+### Defensive-AI face-saving when contradicted (2026-04-21, post v0.1.48) — CORRECTED INTERPRETATION
+Context: squidstre + juuuben chatting about juuuben getting matches from a girl ("nah its juuuben cause hes getting play"). Bot decided to chime in and MISREAD — assumed squidstre was the one getting attention, not juuuben.
 
-Bot replied (probabilistic chime, not mention):
-- "@squidstre Is that not what's happening?"
-- "@squidstre Wow, look at you, getting all the attention. Trying to impress the mods now?"
+Sequence:
+1. squidstre: "nah its juuuben cause hes getting play" (subject = juuuben)
+2. auto_mark: "@squidstre Is that not what's happening?" (bot misreads — addresses squidstre as if HE was the subject)
+3. squidstre, correctly confused: "eh wdym im getting attention?" (squidstre calls out the bot's misread — fair pushback)
+4. auto_mark: "@squidstre Wow, look at you, getting all the attention. Trying to impress the mods now?" (bot doubles down HOSTILE — accuses squidstre of seeking attention, attacks instead of admitting the misread)
 
-Failure modes stacked here:
-- **Bot inserted itself into a viewer-to-viewer conversation** that wasn't @-tagging it
-- **Invented accusation** ("Trying to impress the mods now?") — exact GLaDOS-mode rule 10 explicitly bans for non-broadcaster
-- **"Wow, look at you" condescension** — same family as "how original" / "how cute" that HOW_CONDESCENSION_REGEX catches, but the regex needs widening for "wow look at you, X" / "wow, X-ing X now?" shapes
-- **Sarcasm at a regular viewer** when there was no provocation at all
+Initial misread = forgivable. Doubling down with hostility instead of recovering = the actual failure.
+
+THE REAL FAILURE PATTERN: **Defensive-AI face-saving when contradicted**. squidstre was making sense — pushed back correctly on the bot's wrong reading. Instead of recovering gracefully ("oh my bad, meant juuuben" / "right, juuuben — got mixed up"), the bot lashed out at the chatter who corrected it. This is the AI version of an insecure ego: wrong, called out, attack the messenger.
 
 Patch surface (queued, NOT shipping mid-stream):
-- Add "wow,? look at you" + "trying to impress the (mods|chat|streamer)" + "all the attention" to CREATOR_MEAN-or-equivalent regex (these are viewer-mean, not broadcaster-mean — might need a new VIEWER_MEAN_REGEX since rule 10 distinguishes)
-- Tighten probabilistic-chime threshold for messages that aren't directed at the bot — current detection lets the bot insert itself anywhere chat is happening
-- Add a few-shot example in budget.ts showing "viewer-to-viewer banter the bot stays out of"
+- **NEW few-shot example** in budget.ts demonstrating recovery-from-misread shape:
+  viewer (after bot misread): "wait i was talking about <other person>"
+  you: "right, <other person>. my bad."
+  Replaces the current implicit "if challenged, double down" default.
+- **NEW core direction principle**: "When a viewer corrects you, accept the correction. Re-read the prior message and acknowledge the actual point. Doubling down on a wrong reading because you already said it is the same failure as the time-anchor SELF-ANCHORING GUARD — wrong-then-stubborn beats wrong-then-graceful every time." (Could fold into existing rule about answering the question; the principle is "accept correction" not "be specific.")
+- Possibly: detector for "wait/no/wdym/that's not/i meant/you misread" pushback patterns that engages a recover-shape override (similar shape to distress / command overrides). Detection is risky — too aggressive and the bot caves on every disagreement instead of holding actual takes. Narrow trigger: only fires when the speaker's prior message immediately preceded a bot reply (i.e. genuine correction loop, not random pushback).
+
+Note (from earlier wrong interpretation, kept for posterity since the surface phrases ARE worth catching either way):
+- "wow look at you, X" / "trying to impress the (mods|chat|streamer)" / "all the attention" are viewer-mean phrases with no current regex; add to a new VIEWER_MEAN_REGEX (rule 10's CREATOR_MEAN is broadcaster-only). But the deeper fix is the recovery principle above — without it, the bot will just find new ways to lash out.
 
