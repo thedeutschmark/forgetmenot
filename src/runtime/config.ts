@@ -73,6 +73,16 @@ export interface RuntimeBundle {
   policyVersion: string;
   safeMode: boolean;
   expiresAt: string;
+  /** Twitch app Client ID — used as the Client-Id header on every Helix
+   *  call (timeouts, ban/unban, channel queries). Sourced from the auth
+   *  worker's TWITCH_CLIENT_ID secret and shipped down with the bundle.
+   *  Optional in the type because old worker responses (pre-v0.1.48)
+   *  omit it; runtime must guard before passing to setRuntimeContext.
+   *  Root cause of the "timeouts never fire" bug 2026-04-21: the runtime
+   *  was reading process.env.TWITCH_CLIENT_ID which is empty on a SEA
+   *  exe the user double-clicks, so every Helix call sent no Client-Id
+   *  header and Twitch returned 401 "Client ID is missing". */
+  twitchClientId?: string;
   botAccount: BotAccountCredentials | null;
 }
 

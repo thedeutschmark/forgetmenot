@@ -208,7 +208,17 @@ function startOperationalMode(localConfig: LocalConfig, onStaleCreds: (reason: s
 
       const llmApiKey = localConfig.llmApiKey || process.env.BOT_LLM_API_KEY || "";
       const engineMode = localConfig.replyMode || (process.env.BOT_REPLY_MODE as "shadow" | "mentions_only" | "live") || "mentions_only";
-      const twitchClientId = process.env.TWITCH_CLIENT_ID || "";
+      // Twitch Client ID comes down with the bundle from the auth worker
+      // (worker has TWITCH_CLIENT_ID secret; new field added 2026-04-21
+      // after diagnosing why timeouts never fired — the runtime was
+      // reading process.env.TWITCH_CLIENT_ID which is always empty on
+      // a SEA exe). Env-var fallback retained for dev tsx-watch flows
+      // and to avoid hard-failing if a stale worker hasn't deployed yet.
+      // If both are empty the Helix calls will still 401 — log it loudly.
+      const twitchClientId = bundle.twitchClientId || process.env.TWITCH_CLIENT_ID || "";
+      if (!twitchClientId) {
+        console.warn("[forgetmenot] WARNING: no twitchClientId in bundle and no TWITCH_CLIENT_ID env var. Helix moderation calls (timeouts) WILL fail with 401 'Client ID is missing'. Update auth worker to include twitchClientId in the bundle.");
+      }
       const timeoutMode = localConfig.timeoutMode || (process.env.BOT_TIMEOUT_MODE as TimeoutMode) || "shadow";
       if (isFirst && llmApiKey) {
         initEngine({ mode: engineMode, apiKey: llmApiKey }, bundle);
