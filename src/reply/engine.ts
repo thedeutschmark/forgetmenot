@@ -401,6 +401,30 @@ export async function onChatMessage(
     // Record cooldown in ALL modes
     recordReply(login);
 
+    // Canned-fallback skip on non-mention.
+    // Multiple post-gen scrubs canonize parsed.text to a small set of
+    // canned shorts ("Hm." / "I can't open links.") when they had to
+    // strip everything and couldn't preserve content. On a MENTION the
+    // user expects an answer — "Hm." is at least an acknowledgment. On
+    // a PROBABILISTIC chime, the user wasn't expecting any reply — a
+    // bare "Hm." showing up unprompted reads weird (live failure
+    // 2026-04-22: "a1exzandra: finally finished my shit i gacha now"
+    // → bot: "Hm."). Silence beats canned filler when the reply
+    // wasn't requested. Mentions still get the canned response so the
+    // user sees something happened.
+    const CANNED_FALLBACKS = new Set(["Hm.", "I can't open links."]);
+    if (!isMention && CANNED_FALLBACKS.has(replyText.trim())) {
+      console.log(`[reply:${config.mode}] Skipping canned fallback "${replyText}" on probabilistic chime to ${login} (would read weird unprompted)`);
+      // Still continue to action processing below (proposal may exist
+      // independent of reply text).
+      if (parsed.proposal && currentBundle) {
+        const isShadow = config.mode === "shadow";
+        processAction(parsed.proposal, currentBundle.policy, isShadow);
+      }
+      void maybeFireAutonomousChime();
+      return;
+    }
+
     // When the bot is answering a specific viewer, prepend @login so the
     // reply is visibly addressed. Skip if the LLM already @-tagged someone,
     // or if this is a /me action message — /me renders as "auto_mark ..."

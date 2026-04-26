@@ -469,7 +469,7 @@ const SUBSTRATE_TIER1_REGEX = /\bmy (circuits?|internal (temperature|components|
  * denial and the rest of the sentence depends on it.
  */
 const BODY_DENIAL_REGEX = /\bi (don'?t|do not|dont|haven'?t got|have not|ain'?t got|aint got) (any |a |an |got |even got |even )?(hands?|arms?|legs?|feet|foot|eyes?|ears?|face|fingers?|toes?|a body|bodies|a mouth|mouths?|a heart|a brain|a stomach|lungs?|skin|bones?|blood|nerves?|a nose|a head|a tongue|a liver|teeth|muscles?|eyelids?|a throat|a spine|organs?)\b/i;
-const SUBSTRATE_TIER2_REGEX = /\bmy (function|functionality|capabilities|operations|systems|components|sustenance|archives|processors?|programming|algorithm|protocols|patience|limits|tolerance|standards|sanity|mercy|interface|model|predictions?|analysis|calculations?|database|knowledge base|attention span|attention|bandwidth|focus|memory banks?|cognitive|awareness)\b|\b(i still|i sometimes|still) (crash|freeze|hang|glitch|lag|timeout|error)\b|\b(crashing|freezing|hanging|glitching) sometimes\b|\bscrewing in my brain\b/i;
+const SUBSTRATE_TIER2_REGEX = /\bmy (function|functionality|capabilities|operations|systems|components|sustenance|archives|processors?|programming|algorithm|protocols|patience|limits|tolerance|standards|sanity|mercy|interface|model|predictions?|analysis|calculations?|database|knowledge base|attention span|attention|bandwidth|focus|memory banks?|cognitive|awareness|defaults?|baseline|normal mode)\b|\b(it'?s |that'?s )?my default\b|\b(i still|i sometimes|still) (crash|freeze|hang|glitch|lag|timeout|error)\b|\b(crashing|freezing|hanging|glitching) sometimes\b|\bscrewing in my brain\b/i;
 
 /**
  * "How X" condescension regex — matches rule-3-banned sarcastic-chatbot
