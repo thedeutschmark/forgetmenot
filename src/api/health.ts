@@ -4,7 +4,7 @@ import { handleReviewRequest } from "./review.js";
 import { handleSetupRequest } from "./setup.js";
 import { handlePairingRequest, getPairingState } from "./pairing.js";
 import { handleWizardRequest } from "./wizard.js";
-import { applyCors, handlePreflight } from "./cors.js";
+import { applyCors, handlePreflight, isLocalhostHost } from "./cors.js";
 import { handleControlRequest } from "./control.js";
 import { isPaused, getEngineMode } from "../reply/engine.js";
 import { VERSION } from "../version.js";
@@ -197,6 +197,19 @@ export function startHealthServer(port: number = 7331): http.Server {
   startTime = Date.now();
 
   const server = http.createServer((req, res) => {
+    // DNS-rebinding guard: a remote site that resolves to 127.0.0.1 still
+    // sends its own Host header. We bind to loopback so the browser will
+    // route the request here, but the Origin check alone isn't enough —
+    // an attacker can omit the Origin header (e.g. img / form submission)
+    // and read no body but still trigger side effects on POST endpoints.
+    // Reject anything not addressed to a loopback hostname before we touch
+    // any handler.
+    if (!isLocalhostHost(req)) {
+      res.writeHead(421, { "Content-Type": "text/plain" });
+      res.end("Misdirected request");
+      return;
+    }
+
     // Apply CORS headers + handle OPTIONS preflight FIRST, before any route
     // handler can early-return. v0.1.1 had this below the /health, /status,
     // and / handlers, which meant the toolkit's auto-pair driver got a CORS

@@ -46,6 +46,37 @@ export interface EngineConfig {
 let config: EngineConfig | null = null;
 let currentBundle: RuntimeBundle | null = null;
 
+/**
+ * Per-hour cap on TARS research re-runs. Each research call hits
+ * gemini-2.5-pro with maxTokens=4000 — roughly 5–10× the cost of a normal
+ * flash-lite reply. A confused chat (or a viewer baiting factual unknowns)
+ * can amplify spend by triggering the [RESEARCH:] sentinel repeatedly. The
+ * cap is global rather than per-login so a single chatty viewer can't burn
+ * the operator's budget by sock-puppeting from multiple accounts. Default
+ * 6/hr matches the cost of ~6 expensive gemini-pro calls vs ~60 flash-lite
+ * — a spend ceiling the operator can budget against.
+ *
+ * Counter is in-process; resets on runtime restart (acceptable — cap is a
+ * spend guardrail, not a security boundary). Hour bucket = floor(now/3600s)
+ * so the window slides cleanly without setInterval.
+ */
+const RESEARCH_PER_HOUR_CAP = 6;
+let _researchHourBucket = -1;
+let _researchHourCount = 0;
+
+function checkAndConsumeResearchBudget(): boolean {
+  const bucket = Math.floor(Date.now() / 3_600_000);
+  if (bucket !== _researchHourBucket) {
+    _researchHourBucket = bucket;
+    _researchHourCount = 0;
+  }
+  if (_researchHourCount >= RESEARCH_PER_HOUR_CAP) {
+    return false;
+  }
+  _researchHourCount += 1;
+  return true;
+}
+
 const BASE_REPLY_CHANCE: Record<string, number> = {
   low: 0.05,
   medium: 0.15,
@@ -253,7 +284,15 @@ export async function onChatMessage(
     let researchSource = "none";
     if (settings.thinkingAllowed) {
       const sentinel = parseResearchSentinel(response.text);
-      if (sentinel) {
+      if (sentinel && !checkAndConsumeResearchBudget()) {
+        // Over the per-hour cap. Strip the sentinel from the cheap reply
+        // so we don't ship a "[RESEARCH: …]" string to chat, and fall
+        // through to the normal post-processing path with whatever the
+        // flash model already produced. Logging this lets the operator
+        // see when the cap is biting in real chat.
+        console.log(`[reply] RESEARCH cap exceeded (${RESEARCH_PER_HOUR_CAP}/hr) — suppressing sentinel for "${sentinel.query.slice(0, 60)}"`);
+        response = { ...response, text: response.text.replace(/\[RESEARCH:[^\]]*\]/gi, "").trim() };
+      } else if (sentinel) {
         researchFired = true;
         const provider = getResearchProvider();
         const research = await provider.research(sentinel.query);

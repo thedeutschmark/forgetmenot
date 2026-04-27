@@ -13,6 +13,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { pause, resume, isPaused, getEngineMode } from "../reply/engine.js";
 import { setHealthFlags } from "./health.js";
+import { requireSetupAuth } from "./auth.js";
 import type { LocalConfig } from "../runtime/config.js";
 
 export function handleControlRequest(
@@ -22,18 +23,21 @@ export function handleControlRequest(
   config: LocalConfig,
 ): boolean {
   if (url.pathname === "/control/pause" && req.method === "POST") {
+    if (!requireSetupAuth(req, res, config)) return true;
     const previousMode = pause();
     json(res, 200, { paused: isPaused(), previousMode });
     return true;
   }
 
   if (url.pathname === "/control/resume" && req.method === "POST") {
+    if (!requireSetupAuth(req, res, config)) return true;
     const restoredMode = resume();
     json(res, 200, { paused: isPaused(), mode: restoredMode || getEngineMode() });
     return true;
   }
 
   if (url.pathname === "/control/safe-mode" && req.method === "POST") {
+    if (!requireSetupAuth(req, res, config)) return true;
     let body = "";
     req.on("data", (chunk: string) => { body += chunk; });
     req.on("end", () => { void handleSafeMode(res, body, config); });

@@ -8,6 +8,7 @@
 
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { saveConfig, type LocalConfig } from "../runtime/config.js";
+import { requireSetupAuth } from "./auth.js";
 
 export function handleSetupRequest(
   req: IncomingMessage,
@@ -23,6 +24,7 @@ export function handleSetupRequest(
   }
 
   if (url.pathname === "/setup" && req.method === "POST") {
+    if (!requireSetupAuth(req, res, currentConfig)) return true;
     let body = "";
     req.on("data", (chunk) => { body += chunk; });
     req.on("end", () => {
@@ -66,6 +68,19 @@ export function handleSetupRequest(
 
 function renderSetupPage(config: LocalConfig): string {
   const isConfigured = !!(config.installationId && config.installationSecret);
+  // Don't bake secrets into the HTML — a screenshot or accidental screenshare
+  // of localhost:7331/setup would otherwise leak the LLM API key and
+  // installation secret in cleartext via DOM `value=` attributes. We render
+  // a "configured / not configured" state instead, and the POST handler
+  // preserves the existing value when the field is left blank.
+  const hasLlmKey = !!config.llmApiKey;
+  const hasInstallationSecret = !!config.installationSecret;
+  const llmKeyPlaceholder = hasLlmKey
+    ? "Already set — paste a new key to replace"
+    : "Gemini or OpenAI API key";
+  const installationSecretPlaceholder = hasInstallationSecret
+    ? "Already set — paste a new secret to replace"
+    : "Paste from toolkit";
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -131,8 +146,8 @@ function renderSetupPage(config: LocalConfig): string {
   <input type="text" id="dataDir" value="${escapeHtml(config.dataDir)}" placeholder="C:\\Users\\You\\AppData\\Local\\ForgetMeNot">
   <p class="hint">Where SQLite database, memory, and logs are stored.</p>
 
-  <label>LLM API Key</label>
-  <input type="password" id="llmApiKey" value="${escapeHtml(config.llmApiKey)}" placeholder="Gemini or OpenAI API key">
+  <label>LLM API Key ${hasLlmKey ? '<span class="configured">● configured</span>' : '<span class="unconfigured">● not set</span>'}</label>
+  <input type="password" id="llmApiKey" value="" placeholder="${escapeHtml(llmKeyPlaceholder)}" autocomplete="off">
   <p class="hint">Your own key. Get one from <a href="https://aistudio.google.com/apikey" target="_blank" style="color: #60a5fa;">Google AI Studio</a> (free) or <a href="https://platform.openai.com/api-keys" target="_blank" style="color: #60a5fa;">OpenAI</a>.</p>
 
   <!-- Collapsible: Manual credentials -->
@@ -142,8 +157,8 @@ function renderSetupPage(config: LocalConfig): string {
     <label>Installation ID</label>
     <input type="text" id="installationId" value="${escapeHtml(config.installationId)}" placeholder="Paste from toolkit">
 
-    <label>Installation Secret</label>
-    <input type="password" id="installationSecret" value="${escapeHtml(config.installationSecret)}" placeholder="Paste from toolkit">
+    <label>Installation Secret ${hasInstallationSecret ? '<span class="configured">● configured</span>' : '<span class="unconfigured">● not set</span>'}</label>
+    <input type="password" id="installationSecret" value="" placeholder="${escapeHtml(installationSecretPlaceholder)}" autocomplete="off">
     <p class="hint">From the toolkit Chat Bot → Settings → ForgetMeNot connections.</p>
 
     <label>Auth URL</label>

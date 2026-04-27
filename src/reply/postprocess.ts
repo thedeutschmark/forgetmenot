@@ -267,6 +267,10 @@ export function applyPostGenFilters(
     const match = parsed.text.match(PROMPT_LABEL_REGEX)![0];
     log(`[postgen] Prompt-label scrub — reply contained internal prompt token "${match.trim()}" ("${parsed.text.slice(0, 60)}…")`);
     parsed.text = "Hm.";
+  } else if (parsed.text && STRUCTURAL_PROMPT_LABEL_REGEX.test(parsed.text)) {
+    const match = parsed.text.match(STRUCTURAL_PROMPT_LABEL_REGEX)![0];
+    log(`[postgen] Structural prompt-label scrub — reply contained novel bracketed tag "${match.trim()}" ("${parsed.text.slice(0, 60)}…")`);
+    parsed.text = "Hm.";
   }
 
   // 4. Bot-substrate scrub — context-aware as of v0.1.37.
@@ -532,6 +536,18 @@ const URL_INSPECTION_CLAIM_REGEX = /(?:the|that|your) (?:link|url|page|site)\s+(
  * normal chat prose.
  */
 const PROMPT_LABEL_REGEX = /\[REPLY\]|\[log\]|\[said\]|\[reported\]|\[guess\]|YOUR RECENT REPLIES|\bMESSAGE FROM\b|CHANNEL NOTES:|\bRECENT FROM\b|\bCHAT:|\bSPEAKER:|\bLORE \(|\bSTREAM:|\bTHIS STREAM\b|\bLAST STREAM\b|\bUSER_QUERY\b|\bPATHOS GATE\b|\bCOMMAND MODE\b|BAIT DETECTED|\bMINIMAL INPUT\b|\bRESEARCH MODE\b|SELF-ANCHORING GUARD|FORCE-RESEARCH|CREATOR PRESENT|HELP REQUEST\b|HARD RULES?:|\[GLaDOS.*?\]|\[HAL.*?\]|\[TARS.*?\]|\[USER\]:|\[ASSISTANT\]:|\[BOT\]:|\[AI\]:|\[SYSTEM\]:|\[SUBJECT:|\[Reply to\b|\[TARGET:|\[SPEAKER:|\[LOGIN:|\[NAME:|\[CONTEXT:|\[INPUT:|\[OUTPUT:|\[PROMPT:/i;
+
+/**
+ * Structural fallback: any `[ALL_CAPS:` tag we didn't enumerate above. The
+ * named regex is fast and surgical for known internals; this catches novel
+ * injection labels (`[OVERRIDE:`, `[INSTRUCT:`, `[ROLE:`) that an attacker
+ * might craft to look like a system header. Three-letter floor avoids
+ * matching ordinary acronym-then-colon patterns viewers actually type
+ * ("[FYI:", "[TL:" — both rare in chat anyway, but the floor keeps us
+ * conservative). Trailing space after the colon is required to avoid
+ * matching emoticons like `[O:]`.
+ */
+const STRUCTURAL_PROMPT_LABEL_REGEX = /\[[A-Z][A-Z_]{2,30}:\s/;
 
 /**
  * Insult-intensity detection regex. Rule 10 + the v0.1.34 live observation:
