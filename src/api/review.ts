@@ -18,7 +18,7 @@ import { getDb } from "../db/index.js";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 const ALLOWED_ORIGINS = [
-  "https://toolkit.deutschmark.online",
+  "https://toolset.deutschmark.online",
   "http://localhost:3000",
   "http://localhost:3001",
 ];

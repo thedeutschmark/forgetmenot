@@ -79,6 +79,7 @@ const STARTING_WINDOW_MS = 30_000;
 // means credentials are wrong, not that we haven't tried yet — we'd only
 // log that after a failed call).
 const STARTUP_TRANSIENT_ISSUES = new Set<string>([
+  "Not authenticated with control plane",
   "Twitch chat not connected",
   "Compaction loop stale",
 ]);
@@ -157,7 +158,10 @@ function getHealth(): HealthStatus {
   if (issues.length > 0) {
     status = withinStartupWindow && onlyStartupIssues ? "starting" : "degraded";
   }
-  if (dbStatus === "unhealthy" || _authState === "unauthenticated") status = "error";
+  // Unauthenticated is the normal pre-pairing state. Keep /health reachable
+  // so toolset can drive the first-run pairing flow instead of treating the
+  // live localhost process as offline.
+  if (dbStatus === "unhealthy") status = "error";
 
   return {
     status,
@@ -283,7 +287,7 @@ export function startHealthServer(port: number = 7331): http.Server {
  * Forms that aren't pairing or AI key belong in the toolkit.
  */
 
-const TOOLKIT_URL = "https://toolkit.deutschmark.online/tools/chat-bot";
+const TOOLKIT_URL = "https://toolset.deutschmark.online/tools/chat-bot";
 
 // Inline base64 of services/forgetmenot-tray/icons/flower.png so the brand
 // mark renders without a second HTTP roundtrip and without coupling the
@@ -311,8 +315,8 @@ function renderRootLanding(config: LocalConfig | null, health: HealthStatus): st
   const botLine = health.botConnected && (health.botDisplayName || health.botLogin)
     ? `Bot account: <strong>${escapeHtml(health.botDisplayName || health.botLogin || "")}</strong> connected`
     : paired
-      ? `Bot account: <em>not connected</em> — link in toolkit`
-      : `Bot account: link in toolkit after pairing`;
+      ? `Bot account: <em>not connected</em> — link in toolset`
+      : `Bot account: link in toolset after pairing`;
 
   // Design tokens copied 1:1 from apps/toolkit/app/globals.css so the
   // localhost surface reads as the same product as the toolkit landing,
@@ -436,7 +440,7 @@ function renderRootLanding(config: LocalConfig | null, health: HealthStatus): st
     </div>
     <p class="eyebrow">deutschmark · forgetmenot</p>
     <h1>Local runtime is alive.</h1>
-    <p class="tagline">Two things stay on this machine: your AI key and the pairing handshake. Everything else runs in the toolkit.</p>
+    <p class="tagline">Two things stay on this machine: your AI key and the pairing handshake. Everything else runs in the toolset.</p>
 
     ${paired ? "" : `
     <div class="card">

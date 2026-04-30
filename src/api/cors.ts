@@ -1,9 +1,9 @@
 /**
  * Shared CORS helper for the localhost runtime API.
  *
- * Toolkit (toolkit.deutschmark.online, or localhost:3001 in dev) calls into
+ * Toolset (toolset.deutschmark.online, or localhost:3001 in dev) calls into
  * the runtime to drive setup, read review data, and persist secrets like the
- * AI key. The runtime stays local-first — only the toolkit form lives
+ * AI key. The runtime stays local-first — only the toolset form lives
  * cross-origin; storage stays on disk.
  *
  * Threat model: any website the user visits could try to fetch the localhost
@@ -20,7 +20,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 export const ALLOWED_ORIGINS = [
-  "https://toolkit.deutschmark.online",
+  "https://toolset.deutschmark.online",
   "http://localhost:3000",
   "http://localhost:3001",
 ];
@@ -41,7 +41,7 @@ export function isLocalhostHost(req: IncomingMessage): boolean {
 /** Apply CORS headers if origin is allowed. Returns true if origin matched. */
 export function applyCors(req: IncomingMessage, res: ServerResponse): boolean {
   const origin = req.headers.origin;
-  // Exact match only. `startsWith` was a real bug — `https://toolkit.
+  // Exact match only. `startsWith` was a real bug — `https://toolset.
   // deutschmark.online.attacker.com` startsWith the allowed prefix and would
   // have been reflected with Allow-Credentials, letting any site exfil the
   // localhost API.
