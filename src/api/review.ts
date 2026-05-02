@@ -15,23 +15,8 @@
  */
 
 import { getDb } from "../db/index.js";
+import { applyCors, handlePreflight, isLocalhostHost } from "./cors.js";
 import type { IncomingMessage, ServerResponse } from "node:http";
-
-const ALLOWED_ORIGINS = [
-  "https://toolset.deutschmark.online",
-  "http://localhost:3000",
-  "http://localhost:3001",
-];
-
-function cors(res: ServerResponse, origin: string | undefined): boolean {
-  const allowed = origin && ALLOWED_ORIGINS.some((o) => origin.startsWith(o));
-  if (allowed) {
-    res.setHeader("Access-Control-Allow-Origin", origin!);
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  }
-  return !!allowed;
-}
 
 function json(res: ServerResponse, data: unknown, status = 200): void {
   res.writeHead(status, { "Content-Type": "application/json" });
@@ -50,14 +35,14 @@ export function handleReviewRequest(
 ): boolean {
   if (!url.pathname.startsWith("/review")) return false;
 
-  const origin = req.headers.origin;
-  cors(res, origin);
-
-  if (req.method === "OPTIONS") {
-    res.writeHead(204);
-    res.end();
+  if (!isLocalhostHost(req)) {
+    res.writeHead(421, { "Content-Type": "text/plain" });
+    res.end("Misdirected request");
     return true;
   }
+
+  applyCors(req, res);
+  if (handlePreflight(req, res)) return true;
 
   const db = getDb();
   const limit = parseLimit(url);
