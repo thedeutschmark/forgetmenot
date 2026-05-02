@@ -21,7 +21,6 @@ import { loadLocalConfig, saveConfig, startConfigRefreshLoop, type RuntimeBundle
 import { initDb, closeDb, getDb } from "./db/index.js";
 import { startHealthServer, setHealthFlags, setSetupContext } from "./api/health.js";
 import { setPairingCallbacks } from "./api/pairing.js";
-import { setWizardContext } from "./api/wizard.js";
 import { startGateway, stopGateway } from "./gateway/twitch.js";
 import { initEngine, updateBundle } from "./reply/engine.js";
 import { setRuntimeContext } from "./actions/executor.js";
@@ -46,7 +45,7 @@ async function main() {
   const healthPort = parseInt(process.env.BOT_HEALTH_PORT || "7331", 10);
   const server = startHealthServer(healthPort);
 
-  // 4. Setup/pairing/wizard endpoints — always mounted, regardless of state.
+  // 4. Setup and pairing endpoints — always mounted, regardless of state.
   // The toolkit drives onboarding through these; refusing to mount them when
   // creds are present-but-stale leaves the user with no way out.
   let cleanupOperational: (() => void) | null = null;
@@ -103,7 +102,6 @@ async function main() {
 
   const wireSetupEndpoints = () => {
     setSetupContext(currentConfig, onConfigChanged);
-    setWizardContext(currentConfig, onConfigChanged);
     setPairingCallbacks({ onComplete: onConfigChanged });
   };
 

@@ -3,7 +3,6 @@ import { getDb } from "../db/index.js";
 import { handleReviewRequest } from "./review.js";
 import { handleSetupRequest } from "./setup.js";
 import { handlePairingRequest, getPairingState } from "./pairing.js";
-import { handleWizardRequest } from "./wizard.js";
 import { applyCors, handlePreflight, isLocalhostHost } from "./cors.js";
 import { handleControlRequest } from "./control.js";
 import { isPaused, getEngineMode } from "../reply/engine.js";
@@ -250,9 +249,6 @@ export function startHealthServer(port: number = 7331): http.Server {
     }
 
     const parsedUrl = new URL(req.url || "/", `http://127.0.0.1:${port}`);
-
-    // Wizard (onboarding flow)
-    if (handleWizardRequest(req, res, parsedUrl)) return;
 
     // Pairing API (device-code flow)
     if (_localConfig && handlePairingRequest(req, res, parsedUrl, _localConfig)) return;
