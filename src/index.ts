@@ -2,7 +2,7 @@
  * ForgetMeNot — local Twitch bot runtime, main entry point.
  *
  * Hardening principle (2026-04-14): the setup/pairing API is ALWAYS mounted,
- * regardless of credential state. The toolkit drives onboarding via these
+ * regardless of credential state. The toolset drives onboarding via these
  * endpoints; if they're not mounted, the user gets stuck at "ForgetMeNot
  * isn't running" forever even though the runtime is alive — that bug bit a
  * live demo.
@@ -12,8 +12,8 @@
  *   - operational: valid creds → config refresh loop + Twitch gateway
  *
  * Stale-cred recovery: if the auth worker says "Installation not found"
- * (record was deleted in toolkit, KV wiped, etc.), runtime clears local
- * creds, drops back to setup mode, and the toolkit's auto-pair driver
+ * (record was deleted in toolset, KV wiped, etc.), runtime clears local
+ * creds, drops back to setup mode, and the toolset's auto-pair driver
  * picks up from a clean slate.
  */
 
@@ -21,6 +21,7 @@ import { loadLocalConfig, saveConfig, startConfigRefreshLoop, type RuntimeBundle
 import { initDb, closeDb, getDb } from "./db/index.js";
 import { startHealthServer, setHealthFlags, setSetupContext } from "./api/health.js";
 import { setPairingCallbacks } from "./api/pairing.js";
+import { setWizardContext } from "./api/wizard.js";
 import { startGateway, stopGateway } from "./gateway/twitch.js";
 import { initEngine, updateBundle } from "./reply/engine.js";
 import { setRuntimeContext } from "./actions/executor.js";
@@ -45,8 +46,8 @@ async function main() {
   const healthPort = parseInt(process.env.BOT_HEALTH_PORT || "7331", 10);
   const server = startHealthServer(healthPort);
 
-  // 4. Setup and pairing endpoints — always mounted, regardless of state.
-  // The toolkit drives onboarding through these; refusing to mount them when
+  // 4. Setup/pairing/wizard endpoints — always mounted, regardless of state.
+  // The toolset drives onboarding through these; refusing to mount them when
   // creds are present-but-stale leaves the user with no way out.
   let cleanupOperational: (() => void) | null = null;
 
@@ -82,7 +83,7 @@ async function main() {
       cleanupOperational();
       cleanupOperational = null;
     }
-    // Clear stale creds so the toolkit's auto-pair flow can re-pair cleanly.
+    // Clear stale creds so the toolset's auto-pair flow can re-pair cleanly.
     const cleared: LocalConfig = {
       ...currentConfig,
       installationId: "",
@@ -102,6 +103,7 @@ async function main() {
 
   const wireSetupEndpoints = () => {
     setSetupContext(currentConfig, onConfigChanged);
+    setWizardContext(currentConfig, onConfigChanged);
     setPairingCallbacks({ onComplete: onConfigChanged });
   };
 
@@ -154,7 +156,7 @@ async function main() {
     console.log("[forgetmenot] Credentials present. Starting operational mode...");
     cleanupOperational = startOperationalMode(currentConfig, dropToSetupMode);
   } else {
-    console.log("[forgetmenot] No credentials. Waiting for toolkit to drive pairing.");
+    console.log("[forgetmenot] No credentials. Waiting for toolset to drive pairing.");
   }
 
   // Keep DB import alive (avoid tree-shake if engine never starts)
@@ -194,7 +196,7 @@ function startOperationalMode(localConfig: LocalConfig, onStaleCreds: (reason: s
         console.log(`[forgetmenot] Safe mode: ${bundle.safeMode ? "ON" : "off"}`);
         console.log(`[forgetmenot] AI: ${bundle.settings.aiProvider} (${bundle.settings.aiModel})`);
         // Hide the console window after startup chatter has printed — the
-        // operator chose quiet-background mode in the toolkit. Runs once,
+        // operator chose quiet-background mode in the toolset. Runs once,
         // on first successful bundle fetch. Windows only; no-op elsewhere.
         if (!bundle.settings.showTerminal) {
           console.log("[forgetmenot] Hiding console window (showTerminal=false).");

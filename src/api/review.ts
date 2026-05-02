@@ -1,8 +1,8 @@
 /**
- * Review API — serves recent bot activity data for the toolkit review surface.
+ * Review API — serves recent bot activity data for the toolset review surface.
  *
  * All endpoints are read-only and served from local SQLite.
- * CORS is restricted to toolkit origins.
+ * CORS is restricted to toolset origins.
  *
  * Endpoints:
  *   GET /review/replies       — recent bot messages
@@ -15,8 +15,23 @@
  */
 
 import { getDb } from "../db/index.js";
-import { applyCors, handlePreflight, isLocalhostHost } from "./cors.js";
 import type { IncomingMessage, ServerResponse } from "node:http";
+
+const ALLOWED_ORIGINS = [
+  "https://toolset.deutschmark.online",
+  "http://localhost:3000",
+  "http://localhost:3001",
+];
+
+function cors(res: ServerResponse, origin: string | undefined): boolean {
+  const allowed = origin && ALLOWED_ORIGINS.some((o) => origin.startsWith(o));
+  if (allowed) {
+    res.setHeader("Access-Control-Allow-Origin", origin!);
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  }
+  return !!allowed;
+}
 
 function json(res: ServerResponse, data: unknown, status = 200): void {
   res.writeHead(status, { "Content-Type": "application/json" });
@@ -35,14 +50,14 @@ export function handleReviewRequest(
 ): boolean {
   if (!url.pathname.startsWith("/review")) return false;
 
-  if (!isLocalhostHost(req)) {
-    res.writeHead(421, { "Content-Type": "text/plain" });
-    res.end("Misdirected request");
+  const origin = req.headers.origin;
+  cors(res, origin);
+
+  if (req.method === "OPTIONS") {
+    res.writeHead(204);
+    res.end();
     return true;
   }
-
-  applyCors(req, res);
-  if (handlePreflight(req, res)) return true;
 
   const db = getDb();
   const limit = parseLimit(url);

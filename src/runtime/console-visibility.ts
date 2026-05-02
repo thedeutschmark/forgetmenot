@@ -5,7 +5,7 @@
  * Why this exists: the runtime exe launches with a visible console window
  * by default (because it's a Node SEA binary). When the operator wants
  * quiet-background behavior they toggle `showTerminal: false` in the
- * toolkit; the runtime reads that at startup and hides its own window.
+ * toolset; the runtime reads that at startup and hides its own window.
  *
  * Why a spawned helper: the exe can't link native Win32 APIs directly
  * without a C++ addon. Spawning a short-lived PowerShell that P/Invokes

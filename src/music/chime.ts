@@ -27,7 +27,7 @@
 
 import { getRecentSrCount } from "./sr-tracker.js";
 
-// ── Tunables (defaults; toolkit knobs can override later if we add them) ──
+// ── Tunables (defaults; toolset knobs can override later if we add them) ──
 
 const AUTONOMOUS_COOLDOWN_MS = 30 * 60 * 1000;
 const AUTONOMOUS_PROBABILITY = 0.10; // per tick

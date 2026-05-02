@@ -3,10 +3,10 @@
  *
  * Layered defenses already in place upstream:
  *   1) Host header allowlisted to loopback (DNS-rebinding guard)
- *   2) CORS origin allowlisted to exact toolkit + dev URLs
+ *   2) CORS origin allowlisted to exact toolset + dev URLs
  *
  * What this adds:
- *   3) For requests that arrive cross-origin (from the toolkit), require
+ *   3) For requests that arrive cross-origin (from the toolset), require
  *      Bearer <installationSecret>. Without this, any other native
  *      process on the same machine that can spoof an Origin header could
  *      poke the localhost runtime — the CORS check only governs what a
@@ -19,7 +19,7 @@
  * the same trust we extend to the runtime process.
  *
  * Pre-pairing, installationSecret is empty. We fail closed on cross-origin
- * mutation in that state — pairing must complete before the toolkit can
+ * mutation in that state — pairing must complete before the toolset can
  * drive the runtime. The pairing handshake itself runs through endpoints
  * that are exempt from this gate (see callers).
  */

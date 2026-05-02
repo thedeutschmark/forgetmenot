@@ -3,6 +3,7 @@ import { getDb } from "../db/index.js";
 import { handleReviewRequest } from "./review.js";
 import { handleSetupRequest } from "./setup.js";
 import { handlePairingRequest, getPairingState } from "./pairing.js";
+import { handleWizardRequest } from "./wizard.js";
 import { applyCors, handlePreflight, isLocalhostHost } from "./cors.js";
 import { handleControlRequest } from "./control.js";
 import { isPaused, getEngineMode } from "../reply/engine.js";
@@ -34,7 +35,7 @@ export interface HealthStatus {
    *  whether first-run auto-open is still needed — a "ready" runtime means
    *  bot account connected AND LLM key present, not just one of them. */
   llmKeyConfigured: boolean;
-  /** Reply mode from LocalConfig — toolkit uses this to render the runtime
+  /** Reply mode from LocalConfig — toolset uses this to render the runtime
    *  mode section and POST updates back via /setup. `null` when no config
    *  is registered yet (pre-pairing). */
   replyMode: string | null;
@@ -215,7 +216,7 @@ export function startHealthServer(port: number = 7331): http.Server {
 
     // Apply CORS headers + handle OPTIONS preflight FIRST, before any route
     // handler can early-return. v0.1.1 had this below the /health, /status,
-    // and / handlers, which meant the toolkit's auto-pair driver got a CORS
+    // and / handlers, which meant the toolset's auto-pair driver got a CORS
     // error on /health and never even reached the runtime check.
     applyCors(req, res);
     if (handlePreflight(req, res)) return;
@@ -240,8 +241,8 @@ export function startHealthServer(port: number = 7331): http.Server {
     // Root landing — the compact localhost-owned surface per the onboarding
     // shift locked 2026-04-13. Shows status, pairing code (if unpaired), and
     // the AI key field. Everything else (bot account, rollout, personality)
-    // lives in toolkit. This replaces the old "/ → 404" behavior that made
-    // the toolkit wizard's "open localhost:7331" instruction a dead end.
+    // lives in toolset. This replaces the old "/ → 404" behavior that made
+    // the toolset wizard's "open localhost:7331" instruction a dead end.
     if ((req.url === "/" || req.url === "") && req.method === "GET") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
       res.end(renderRootLanding(_localConfig, getHealth()));
@@ -249,6 +250,9 @@ export function startHealthServer(port: number = 7331): http.Server {
     }
 
     const parsedUrl = new URL(req.url || "/", `http://127.0.0.1:${port}`);
+
+    // Wizard (onboarding flow)
+    if (handleWizardRequest(req, res, parsedUrl)) return;
 
     // Pairing API (device-code flow)
     if (_localConfig && handlePairingRequest(req, res, parsedUrl, _localConfig)) return;
@@ -277,13 +281,13 @@ export function startHealthServer(port: number = 7331): http.Server {
  *
  * Compact landing served at `/`. Per the locked onboarding boundary:
  *   localhost owns  pairing code + AI key + local runtime status
- *   toolkit   owns  bot account + rollout + settings + policy + review
+ *   toolset   owns  bot account + rollout + settings + policy + review
  *
  * Any time this page wants to grow into a "wizard" — that's a smell.
- * Forms that aren't pairing or AI key belong in the toolkit.
+ * Forms that aren't pairing or AI key belong in the toolset.
  */
 
-const TOOLKIT_URL = "https://toolset.deutschmark.online/tools/chat-bot";
+const TOOLSET_URL = "https://toolset.deutschmark.online/tools/chat-bot";
 
 // Inline base64 of services/forgetmenot-tray/icons/flower.png so the brand
 // mark renders without a second HTTP roundtrip and without coupling the
@@ -314,8 +318,8 @@ function renderRootLanding(config: LocalConfig | null, health: HealthStatus): st
       ? `Bot account: <em>not connected</em> — link in toolset`
       : `Bot account: link in toolset after pairing`;
 
-  // Design tokens copied 1:1 from apps/toolkit/app/globals.css so the
-  // localhost surface reads as the same product as the toolkit landing,
+  // Design tokens copied 1:1 from apps/toolset/app/globals.css so the
+  // localhost surface reads as the same product as the toolset landing,
   // not a separate utility page. Only delta is the brand mark — flower
   // here, "dm" rack-light there.
   return `<!DOCTYPE html>
@@ -415,16 +419,16 @@ function renderRootLanding(config: LocalConfig | null, health: HealthStatus): st
   .note{font-size:11px;color:var(--tk-text-dim);margin-top:10px;line-height:1.5}
   .hint{font-size:11px;color:var(--tk-text-dim);margin-top:8px;line-height:1.5}
   .saved{color:var(--tk-success);font-size:11px}
-  .toolkit-cta{
+  .toolset-cta{
     display:flex;align-items:center;justify-content:space-between;gap:14px;
     width:100%;padding:14px 16px;border-radius:var(--tk-radius-md);
     background:var(--tk-bg-panel);border:1px solid var(--tk-border);
     color:var(--tk-text);font-size:13px;line-height:1.5;text-decoration:none;
     transition:border-color .15s;
   }
-  .toolkit-cta:hover{border-color:var(--tk-border-hover)}
-  .toolkit-cta strong{color:var(--tk-text-strong);font-weight:600;display:block}
-  .toolkit-cta .arrow{color:var(--tk-text-dim);font-size:18px}
+  .toolset-cta:hover{border-color:var(--tk-border-hover)}
+  .toolset-cta strong{color:var(--tk-text-strong);font-weight:600;display:block}
+  .toolset-cta .arrow{color:var(--tk-text-dim);font-size:18px}
   a{color:var(--tk-accent)}
   a:hover{color:#a8c2fa}
 </style>
@@ -476,9 +480,9 @@ function renderRootLanding(config: LocalConfig | null, health: HealthStatus): st
       </form>
     </div>
 
-    <a href="${TOOLKIT_URL}" class="toolkit-cta">
+    <a href="${TOOLSET_URL}" class="toolset-cta">
       <div>
-        <strong>Open toolkit</strong>
+        <strong>Open toolset</strong>
         <span style="color:var(--tk-text-muted);font-size:12px">Connect bot account, rollout defaults, personality.</span>
       </div>
       <span class="arrow">→</span>

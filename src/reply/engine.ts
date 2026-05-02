@@ -83,6 +83,90 @@ const BASE_REPLY_CHANCE: Record<string, number> = {
   high: 0.35,
 };
 
+// When the bot replied to this viewer within CONVERSATION_WINDOW_MS, treat
+// the viewer's next message as a likely conversational follow-up — no @ needed.
+// Tuned for normal Twitch chat cadence: a follow-up "really though?" usually
+// lands within 30-90 seconds of the reply. 3 minutes covers slower typists
+// without keeping the bot pinned to viewers who've moved on.
+const CONVERSATION_WINDOW_MS = 3 * 60_000;
+const CONVERSATION_CHANCE_MULTIPLIER = 4;
+const CONVERSATION_CHANCE_CAP = 0.85;
+
+function isInActiveConversation(twitchId: string): boolean {
+  if (!twitchId) return false;
+  try {
+    const row = getDb()
+      .prepare(
+        `SELECT 1 FROM bot_messages
+         WHERE viewer_target_id = ?
+           AND occurred_at > datetime('now', ?)
+         LIMIT 1`,
+      )
+      .get(twitchId, `-${Math.round(CONVERSATION_WINDOW_MS / 1000)} seconds`);
+    return Boolean(row);
+  } catch {
+    return false;
+  }
+}
+
+// Re-roll path for canned-fallback recovery on mentions. Escalates to
+// gemini-2.5-pro and TRUSTS its output.
+//
+// Conceptually this is the same trade Anthropic / OpenAI made with
+// reasoning models: when the cheap model can't get there, you spend
+// more tokens on a smarter model rather than layer more guardrails on
+// the cheap one. Flash leaks AI tropes despite the prompt's hard rules;
+// re-rolling on Flash with extra nag is whack-a-mole. Pro follows the
+// persona reliably, so we send its output through basic Twitch chat
+// compat (validateReplyText: newlines, length cap, action-leak strip)
+// and skip the Flash-era substrate scrubs. The substrate scrubs exist
+// because Flash needed them — Pro doesn't.
+//
+// "Cost of not thinking of something is sending it to a higher model" —
+// user direction 2026-04-30. The re-roll only fires on the rare path
+// where surgical-strip in postprocess.ts already failed AND the original
+// reply was canned, so the Pro spend is bounded.
+//
+// Reasoning-model token budget: Pro spends tokens on hidden thinking
+// before the visible reply. 4000 mirrors the TARS-mode budget (~3500
+// thinking, ~500 chat). Lower budgets risk an empty visible reply.
+const REROLL_MODEL = "gemini-2.5-pro";
+const REROLL_MAX_TOKENS = 4000;
+
+async function attemptRerollForCannedFallback(
+  settings: BotSettings,
+  config: { mode: EngineMode; apiKey: string },
+  originalMessages: LlmMessage[],
+  originalResponse: { model: string; text: string },
+  isMention: boolean,
+  login: string,
+  message: string,
+  context: ReplyContext,
+): Promise<string | null> {
+  try {
+    const guidance: LlmMessage = {
+      role: "system",
+      content:
+        "Your previous attempt was rejected by post-processing. Likely cause: AI-substrate language ('my circuits', 'my training', 'my programming', 'i don't have a body'), invented honorifics, or exact-duplicate of a recent reply. "
+        + "Rewrite. ANSWER THE VIEWER'S ACTUAL QUESTION. No AI tropes, no references to your nature, no '/me' narration, no honorifics, no repeating recent reply shapes. "
+        + "If the question is mundane (pets, food, weather, opinions), give a real direct answer in character. The viewer is owed substance — they asked, they get an answer, not a deflection. Never reply with 'Hm.' alone.",
+    };
+    const rerollMessages: LlmMessage[] = [...originalMessages, guidance];
+    const response = await chatCompletion(
+      { provider: settings.aiProvider, model: REROLL_MODEL, apiKey: config.apiKey },
+      { messages: rerollMessages, maxTokens: REROLL_MAX_TOKENS, temperature: 0.85 },
+    );
+    // Trust Pro. Run ONLY validateReplyText (Twitch chat compat — newlines,
+    // length cap, action-leak strip). No substrate scrubs — those exist for
+    // Flash failure modes Pro doesn't share.
+    const parsed = parseReplyWithAction(response.text);
+    return validateReplyText(parsed.text, settings, response.finishReason);
+  } catch (err) {
+    console.warn(`[reply:reroll] failed: ${err instanceof Error ? err.message : String(err)}`);
+    return null;
+  }
+}
+
 /**
  * Mentions get a fuller model than autonomous probabilistic replies.
  *
@@ -197,10 +281,18 @@ export async function onChatMessage(
   const isMention = isMentionOfBot(message, settings);
 
   // Should we attempt a reply?
-  if (!shouldAttemptReply(login, message, settings, config.mode, isMention)) return;
+  // Conversation continuity: if the bot replied to this viewer recently,
+  // their next message is likely a follow-up to that reply. Treat it as a
+  // soft mention — boost the probabilistic chance, and waive the per-user
+  // cooldown in checkReplyPolicy so a 10s cooldown doesn't kill the dialogue.
+  const inConversation = !isMention && isInActiveConversation(twitchId);
 
-  // Policy check — mentions bypass cooldowns and the autonomous-replies gate
-  const policyResult = checkReplyPolicy(settings, policy, login, isMention);
+  if (!shouldAttemptReply(login, message, settings, config.mode, isMention, inConversation)) return;
+
+  // Policy check — mentions bypass cooldowns and the autonomous-replies gate.
+  // Conversation follow-ups bypass per-user cooldown (but still respect
+  // global cooldown so the bot doesn't spam fast chat).
+  const policyResult = checkReplyPolicy(settings, policy, login, isMention, inConversation);
   if (!policyResult.allowed) {
     logBlockedAttempt(login, twitchId, "policy", policyResult.reason, isMention);
     return;
@@ -440,39 +532,59 @@ export async function onChatMessage(
     // Record cooldown in ALL modes
     recordReply(login);
 
-    // Canned-fallback skip on non-mention.
+    // Canned-fallback handling — two-tier escalation.
     // Multiple post-gen scrubs canonize parsed.text to a small set of
-    // canned shorts ("Hm." / "I can't open links.") when they had to
-    // strip everything and couldn't preserve content. On a MENTION the
-    // user expects an answer — "Hm." is at least an acknowledgment. On
-    // a PROBABILISTIC chime, the user wasn't expecting any reply — a
-    // bare "Hm." showing up unprompted reads weird (live failure
-    // 2026-04-22: "a1exzandra: finally finished my shit i gacha now"
-    // → bot: "Hm."). Silence beats canned filler when the reply
-    // wasn't requested. Mentions still get the canned response so the
-    // user sees something happened.
+    // canned shorts ("Hm." / "I can't open links.") when surgical strip
+    // in postprocess.ts couldn't preserve any content.
+    //
+    // Tier 1 (probabilistic chimes): skip the send. The viewer wasn't
+    //   expecting a reply; "Hm." showing up unprompted reads as bot-noise.
+    // Tier 2 (mentions): try ONE re-roll with anti-trope guidance. If the
+    //   re-roll also gets stripped, send the canned "Hm." with a loud log.
+    //   We previously had a tier-3 dry-ack list ("Go on.", "Specifics?")
+    //   but that's just "Hm." with extra steps and reads as dismissive
+    //   on real questions. If both surgical strip AND re-roll fail, the
+    //   bot genuinely had nothing — pretending otherwise is worse.
     const CANNED_FALLBACKS = new Set(["Hm.", "I can't open links."]);
-    if (!isMention && CANNED_FALLBACKS.has(replyText.trim())) {
-      console.log(`[reply:${config.mode}] Skipping canned fallback "${replyText}" on probabilistic chime to ${login} (would read weird unprompted)`);
-      // Still continue to action processing below (proposal may exist
-      // independent of reply text).
-      if (parsed.proposal && currentBundle) {
-        const isShadow = config.mode === "shadow";
-        processAction(parsed.proposal, currentBundle.policy, isShadow);
+    let finalReplyText = replyText;
+    if (CANNED_FALLBACKS.has(replyText.trim())) {
+      if (!isMention) {
+        // Tier 1 — silent skip on probabilistic
+        console.log(`[reply:${config.mode}] Skipping canned fallback "${replyText}" on probabilistic chime to ${login}`);
+        if (parsed.proposal && currentBundle) {
+          const isShadow = config.mode === "shadow";
+          processAction(parsed.proposal, currentBundle.policy, isShadow);
+        }
+        void maybeFireAutonomousChime();
+        return;
       }
-      void maybeFireAutonomousChime();
-      return;
+
+      // Tier 2 — re-roll for mentions
+      console.log(`[reply:${config.mode}] Canned fallback "${replyText}" on mention from ${login} — attempting one re-roll with anti-trope guidance`);
+      const rerolledText = await attemptRerollForCannedFallback(
+        settings, config, messages, response, isMention, login, message, context,
+      );
+      if (rerolledText && !CANNED_FALLBACKS.has(rerolledText.trim())) {
+        console.log(`[reply:${config.mode}] Re-roll succeeded: "${rerolledText.slice(0, 80)}"`);
+        finalReplyText = rerolledText;
+      } else {
+        // Re-roll also produced canned. Surgical strip + re-roll both
+        // failed — send the canned reply as-is with a loud log so this
+        // can be tracked in production. If it's frequent, the model or
+        // prompt needs work; a hardcoded ack list won't fix it.
+        console.warn(`[reply:${config.mode}] BOTH surgical strip AND re-roll failed for ${login} on "${message.slice(0, 60)}" — sending "${replyText}" as last resort`);
+      }
     }
 
     // When the bot is answering a specific viewer, prepend @login so the
     // reply is visibly addressed. Skip if the LLM already @-tagged someone,
     // or if this is a /me action message — /me renders as "auto_mark ..."
     // so an @ prefix would land inside the narration text awkwardly.
-    const isMeAction = /^\s*\/me\s/.test(replyText);
-    const alreadyTagged = /^\s*@/.test(replyText);
+    const isMeAction = /^\s*\/me\s/.test(finalReplyText);
+    const alreadyTagged = /^\s*@/.test(finalReplyText);
     const prefixed = isMeAction || alreadyTagged
-      ? replyText
-      : `@${login} ${replyText}`;
+      ? finalReplyText
+      : `@${login} ${finalReplyText}`;
 
     // Send the reply
     if (config.mode === "shadow") {
@@ -482,10 +594,30 @@ export async function onChatMessage(
       console.log(`[reply:${config.mode}] → ${login}: ${prefixed}`);
     }
 
-    // Process action proposal (if any)
+    // Process action proposal (if any).
+    //
+    // Mention guard: a viewer @-mentioning the bot is asking a question. The
+    // LLM is over-eager about reading mentions as "challenging your authority"
+    // and proposes timeout_funny in response — observed live with two
+    // viewers asking back-to-back, the second got timed out instead of
+    // queued for a reply. Reply went through, but the action shouldn't.
+    //
+    // Bait phrases ("do it coward", "i dare you", "timeout me") still pass
+    // through — those are explicit asks for a timeout and the bit relies on
+    // the bot honoring them. Anything else: an @-mention is a question, not
+    // a fight to win.
     if (parsed.proposal && currentBundle) {
-      const isShadow = config.mode === "shadow";
-      processAction(parsed.proposal, currentBundle.policy, isShadow);
+      const dropTimeoutOnMention =
+        isMention
+        && parsed.proposal.action === "timeout_funny"
+        && parsed.proposal.target?.toLowerCase() === login.toLowerCase()
+        && !detectTimeoutBait(message);
+      if (dropTimeoutOnMention) {
+        console.log(`[reply] Dropping timeout_funny on @-mention from ${login} (no bait detected) — mention is an ask, not a challenge`);
+      } else {
+        const isShadow = config.mode === "shadow";
+        processAction(parsed.proposal, currentBundle.policy, isShadow);
+      }
     }
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
@@ -605,11 +737,13 @@ function shouldAttemptReply(
   settings: BotSettings,
   mode: EngineMode,
   isMention: boolean,
+  inConversation: boolean,
 ): boolean {
   // Always reply to mentions
   if (isMention) return true;
 
-  // mentions_only mode: only reply to mentions
+  // mentions_only mode: only reply to mentions — even active conversations
+  // don't override this, because the operator explicitly chose mentions-only.
   if (mode === "mentions_only") return false;
 
   // Skip commands
@@ -627,8 +761,14 @@ function shouldAttemptReply(
   const wordCount = message.trim().split(/\s+/).filter((w) => w.length > 1).length;
   if (stripped.length < 8 && wordCount < 2) return false;
 
-  // Probabilistic reply
-  const chance = BASE_REPLY_CHANCE[settings.replyFrequency] ?? 0.1;
+  // Probabilistic reply. Conversation follow-up gets a multiplier so the
+  // viewer doesn't have to keep typing @-mentions to keep the dialogue
+  // going — the bot just naturally responds for a few minutes after each
+  // reply.
+  const base = BASE_REPLY_CHANCE[settings.replyFrequency] ?? 0.1;
+  const chance = inConversation
+    ? Math.min(CONVERSATION_CHANCE_CAP, base * CONVERSATION_CHANCE_MULTIPLIER)
+    : base;
   return Math.random() < chance;
 }
 

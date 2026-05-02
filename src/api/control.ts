@@ -13,6 +13,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { pause, resume, isPaused, getEngineMode } from "../reply/engine.js";
 import { setHealthFlags } from "./health.js";
+import { authFetch } from "../runtime/authFetch.js";
 import { requireSetupAuth } from "./auth.js";
 import type { LocalConfig } from "../runtime/config.js";
 
@@ -67,7 +68,7 @@ async function handleSafeMode(res: ServerResponse, rawBody: string, config: Loca
   }
 
   try {
-    const r = await fetch(`${config.authUrl}/bot-runtime/policy`, {
+    const r = await authFetch(`${config.authUrl}/bot-runtime/policy`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

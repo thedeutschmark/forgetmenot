@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { authFetch } from "./authFetch.js";
 
 export type ReplyMode = "shadow" | "mentions_only" | "live";
 export type TimeoutMode = "shadow" | "dry_run" | "live";
@@ -218,7 +219,7 @@ export async function fetchRuntimeBundle(local: LocalConfig): Promise<{ bundle: 
   }
 
   try {
-    const res = await fetch(`${local.authUrl}/bot-runtime/session`, {
+    const res = await authFetch(`${local.authUrl}/bot-runtime/session`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -230,7 +231,7 @@ export async function fetchRuntimeBundle(local: LocalConfig): Promise<{ bundle: 
     if (!res.ok) {
       const body = await res.text();
       // Auth worker returns 401 + "Installation not found" when the install
-      // record is gone (deleted in toolkit, or KV wiped). Surface this as a
+      // record is gone (deleted in toolset, or KV wiped). Surface this as a
       // typed signal so the runtime can self-heal by clearing stale creds
       // instead of looping forever in operational mode against a dead install.
       const isStaleCreds = res.status === 401 && body.includes("Installation not found");

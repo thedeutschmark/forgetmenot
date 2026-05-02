@@ -38,7 +38,7 @@ export function handleSetupRequest(
           installationSecret: parsed.installationSecret?.trim() || currentConfig.installationSecret,
           dataDir: parsed.dataDir?.trim() || currentConfig.dataDir,
           llmApiKey: parsed.llmApiKey?.trim() || currentConfig.llmApiKey,
-          // Runtime modes are now driven from the toolkit via this endpoint.
+          // Runtime modes are now driven from the toolset via this endpoint.
           // Validated against the known-good lists so a typo can't silently
           // degrade behavior.
           replyMode: (REPLY_MODES as readonly string[]).includes(parsed.replyMode as string)
@@ -80,7 +80,7 @@ function renderSetupPage(config: LocalConfig): string {
     : "Gemini or OpenAI API key";
   const installationSecretPlaceholder = hasInstallationSecret
     ? "Already set — paste a new secret to replace"
-    : "Paste from toolkit";
+    : "Paste from toolset";
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -155,11 +155,11 @@ function renderSetupPage(config: LocalConfig): string {
   <button class="advanced-toggle" onclick="toggleAdvanced()">&#9654; Advanced / Manual Setup</button>
   <div id="advancedContent" class="advanced-content">
     <label>Installation ID</label>
-    <input type="text" id="installationId" value="${escapeHtml(config.installationId)}" placeholder="Paste from toolkit">
+    <input type="text" id="installationId" value="${escapeHtml(config.installationId)}" placeholder="Paste from toolset">
 
     <label>Installation Secret ${hasInstallationSecret ? '<span class="configured">● configured</span>' : '<span class="unconfigured">● not set</span>'}</label>
     <input type="password" id="installationSecret" value="" placeholder="${escapeHtml(installationSecretPlaceholder)}" autocomplete="off">
-    <p class="hint">From the toolkit Chat Bot → Settings → ForgetMeNot connections.</p>
+    <p class="hint">From the toolset Chat Bot → Settings → ForgetMeNot connections.</p>
 
     <label>Auth URL</label>
     <input type="text" id="authUrl" value="${escapeHtml(config.authUrl)}" placeholder="https://auth.deutschmark.online">

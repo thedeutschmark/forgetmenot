@@ -11,6 +11,7 @@
 
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { saveConfig, type LocalConfig } from "../runtime/config.js";
+import { authFetch } from "../runtime/authFetch.js";
 
 export type PairingStatus = "idle" | "polling" | "complete" | "expired" | "error";
 
@@ -64,7 +65,7 @@ export async function startPairing(config: LocalConfig) {
   state = { status: "polling", pairingCode: null, expiresAt: null, error: null };
 
   try {
-    const startRes = await fetch(`${config.authUrl}/bot-pairing/start`, {
+    const startRes = await authFetch(`${config.authUrl}/bot-pairing/start`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: "{}",
@@ -79,10 +80,10 @@ export async function startPairing(config: LocalConfig) {
     const data = (await startRes.json()) as { pairingCode: string; expiresAt: string };
     state = { status: "polling", pairingCode: data.pairingCode, expiresAt: data.expiresAt, error: null };
 
-    // Toolkit drives completion via session-authenticated POST to the auth
+    // Toolset drives completion via session-authenticated POST to the auth
     // worker's /bot-pairing/complete. Runtime no longer opens a browser tab —
     // that was the band-aid UX. Runtime just exposes the code via
-    // /setup/pair/status; toolkit reads it and completes server-side.
+    // /setup/pair/status; toolset reads it and completes server-side.
 
     // Start polling for the auth-worker pairing record being marked complete
     schedulePoll(config, data.pairingCode, new Date(data.expiresAt).getTime());
@@ -102,7 +103,7 @@ function schedulePoll(config: LocalConfig, code: string, expiresAtMs: number) {
     }
 
     try {
-      const res = await fetch(`${config.authUrl}/bot-pairing/poll`, {
+      const res = await authFetch(`${config.authUrl}/bot-pairing/poll`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pairingCode: code }),

@@ -303,26 +303,52 @@ export function applyPostGenFilters(
   // would then not work ever." The context gate applies the same logic
   // here — allow the word when the viewer's own message made the word
   // appropriate.
+  // Surgical strip: when ONE sentence in a multi-sentence reply trips a
+  // substrate scrub, drop just that sentence instead of nuking the whole
+  // reply to "Hm.". Empirically the LLM often gives a real answer THEN
+  // tacks on an AI-trope coda ("Genetics. Hair density. Though my circuits
+  // don't process softness." — first two sentences are great, the third
+  // gets the whole thing scrubbed under the destructive policy).
+  // Falls through to "Hm." only when surgical strip leaves nothing.
   if (parsed.text) {
     if (SUBSTRATE_TIER1_REGEX.test(parsed.text)) {
-      log(`[postgen] Substrate scrub (tier 1) — reply contained hostile-AI trope, replaced with canned ("${parsed.text.slice(0, 60)}…")`);
-      parsed.text = "Hm.";
+      const surgical = stripSentencesMatching(parsed.text, SUBSTRATE_TIER1_REGEX);
+      if (surgical) {
+        log(`[postgen] Substrate scrub (tier 1, surgical) — dropped offending sentence, kept rest ("${surgical.slice(0, 60)}…")`);
+        parsed.text = surgical;
+      } else {
+        log(`[postgen] Substrate scrub (tier 1, full) — entire reply was hostile-AI trope, replaced with canned ("${parsed.text.slice(0, 60)}…")`);
+        parsed.text = "Hm.";
+      }
     } else if (BODY_DENIAL_REGEX.test(parsed.text)) {
       // "i don't have hands" / "considering i don't have eyes" — a subtler
       // rule-3a break than "my circuits" but the same AI-substrate tell.
       // Caught live on v0.1.42 2026-04-20: "i know everyone here like the
       // back of my own hand, which is impressive considering i don't have
       // hands." — self-referential disembodiment, character-break every time.
-      // Scrub regardless of context: no legitimate chat message justifies
-      // the bot narrating its lack of a body.
-      log(`[postgen] Substrate scrub (body-denial) — reply narrated lack of human body ("${parsed.text.slice(0, 60)}…")`);
-      parsed.text = "Hm.";
+      // Surgical strip applies: keep the first half ("i know everyone..."),
+      // drop the disembodiment coda. Falls through to "Hm." if no clean
+      // sentences remain.
+      const surgical = stripSentencesMatching(parsed.text, BODY_DENIAL_REGEX);
+      if (surgical) {
+        log(`[postgen] Substrate scrub (body-denial, surgical) — dropped disembodiment sentence, kept rest ("${surgical.slice(0, 60)}…")`);
+        parsed.text = surgical;
+      } else {
+        log(`[postgen] Substrate scrub (body-denial, full) — reply was entirely body-denial, replaced with canned ("${parsed.text.slice(0, 60)}…")`);
+        parsed.text = "Hm.";
+      }
     } else if (SUBSTRATE_TIER2_REGEX.test(parsed.text)) {
       if (detectMetaSelfQuery(message)) {
         log(`[postgen] Substrate scrub (tier 2) — soft self-narration allowed (viewer asked a meta-self question: "${message.slice(0, 60)}…")`);
       } else {
-        log(`[postgen] Substrate scrub (tier 2) — unprompted soft self-narration, replaced with canned ("${parsed.text.slice(0, 60)}…")`);
-        parsed.text = "Hm.";
+        const surgical = stripSentencesMatching(parsed.text, SUBSTRATE_TIER2_REGEX);
+        if (surgical) {
+          log(`[postgen] Substrate scrub (tier 2, surgical) — dropped self-narration sentence, kept rest ("${surgical.slice(0, 60)}…")`);
+          parsed.text = surgical;
+        } else {
+          log(`[postgen] Substrate scrub (tier 2, full) — reply was entirely self-narration, replaced with canned ("${parsed.text.slice(0, 60)}…")`);
+          parsed.text = "Hm.";
+        }
       }
     }
   }
@@ -565,4 +591,51 @@ const INSULT_REGEX = /,?\s*\byou (absolute|total|complete|utter|fucking|damn|blo
  *  exotic logins that might contain regex metacharacters. */
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Surgical sentence-level strip for substrate scrubs.
+ *
+ * Splits text into sentences, drops any sentence whose body matches the
+ * given regex, returns the joined remainder. Returns null when the strip
+ * leaves nothing — caller should fall through to whatever destructive
+ * fallback they had ("Hm." in current code).
+ *
+ * Why this exists: the substrate/body-denial scrubs originally nuked the
+ * WHOLE reply when any AI-trope phrase appeared. In practice the LLM
+ * often gives a real answer first then tacks on an AI-narration coda,
+ * and the destructive scrub threw out the answer with the coda. Live
+ * 2026-04-30: "why is my cat so soft @auto_mark" → reply scrubbed to
+ * "Hm." because of an AI-trope coda, user direction was explicit that
+ * any substantive answer beats "Hm.".
+ *
+ * Sentence split matches common terminators (. ! ? …) followed by
+ * whitespace OR end-of-string. Runs of whitespace inside a sentence are
+ * preserved. Final orphan fragment without a terminator is treated as a
+ * sentence too — so a one-line reply with no period still works.
+ */
+function stripSentencesMatching(text: string, badPattern: RegExp): string | null {
+  // Split on sentence terminators while keeping the terminator attached
+  // to the preceding sentence. Lookbehind keeps "Hello. World." → ["Hello.", "World."].
+  const sentences = text
+    .split(/(?<=[.!?…])\s+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+
+  if (sentences.length <= 1) {
+    // Single-sentence reply — surgical strip would leave nothing. Caller
+    // should use destructive fallback. Return null so they branch to it.
+    return null;
+  }
+
+  const kept = sentences.filter((s) => !badPattern.test(s));
+  if (kept.length === 0) return null;
+  if (kept.length === sentences.length) {
+    // Pattern matched the joined text but no individual sentence — likely
+    // the offending phrase straddled a sentence boundary or the regex
+    // matches whitespace-spanning content. Destructive fallback is safer
+    // than shipping the original.
+    return null;
+  }
+  return kept.join(" ");
 }

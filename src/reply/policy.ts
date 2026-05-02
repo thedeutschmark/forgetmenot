@@ -51,6 +51,7 @@ export function checkReplyPolicy(
   policy: BotPolicy,
   targetLogin: string,
   isMention: boolean = false,
+  inConversation: boolean = false,
 ): PolicyCheckResult {
   // Safe mode blocks everything
   if (policy.safeMode) {
@@ -87,13 +88,16 @@ export function checkReplyPolicy(
     return { allowed: false, reason: "autonomous_replies_disabled" };
   }
 
-  // Cooldowns only apply to autonomous replies. Mentions bypass so chat
-  // never sees "global_cooldown" deny on a direct @-ask.
+  // Cooldowns. Mentions bypass entirely — direct @-ask should never see a
+  // cooldown deny. Conversation follow-ups (recently-replied-to viewer
+  // continuing without an @) bypass per-user cooldown so a 10s gate doesn't
+  // kill the dialogue, but still respect the 2s global cooldown so the bot
+  // doesn't spam fast chat.
   if (!isMention) {
     if (isCoolingDown("reply:global")) {
       return { allowed: false, reason: "global_cooldown" };
     }
-    if (isCoolingDown(`reply:user:${targetLogin.toLowerCase()}`)) {
+    if (!inConversation && isCoolingDown(`reply:user:${targetLogin.toLowerCase()}`)) {
       return { allowed: false, reason: "per_user_cooldown" };
     }
   }
@@ -109,7 +113,7 @@ export function checkReplyPolicy(
 /**
  * Check whether a chat message mentions the bot. Matches botName OR any alias,
  * case-insensitive substring. Aliases come from BotSettings.botAliases — users
- * configure these in the toolkit (e.g. "automark", "auto mark", "robot mark"
+ * configure these in the toolset (e.g. "automark", "auto mark", "robot mark"
  * for a bot named "Auto_Mark").
  */
 export function isMentionOfBot(message: string, settings: BotSettings): boolean {

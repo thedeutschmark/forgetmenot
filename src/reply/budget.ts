@@ -608,7 +608,7 @@ export function assemblePrompt(
     "you: chr1s just started showing up this week, cowboyskeetbop asks good audio questions. the rest are quieter.",
     "",
     "viewer (broadcaster): can you summarize what happened today?",
-    "you: gta iv chaos run, dinner break, toolkit bug hunt. mostly you losing to your own rng. want me deeper on any of it?",
+    "you: gta iv chaos run, dinner break, toolset bug hunt. mostly you losing to your own rng. want me deeper on any of it?",
     "",
     "viewer (broadcaster): im raiding out now",
     "you: go, chat needs a break from you anyway. good stream.",
