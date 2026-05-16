@@ -9,12 +9,3 @@ eval/reports/
 # Test artifacts
 codex_patch_test.txt
 *.tmp
-
-# Environment
-.env
-.env.local
-.env.*.local
-
-# AI / scratch dirs
-.superpowers/
-.claude/
